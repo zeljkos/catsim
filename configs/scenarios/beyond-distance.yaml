@@ -1,0 +1,10 @@
+# Honest about the design limits: a 2-qubit X burst (qubits 1 and 8, adjacent
+# in the left column) exceeds what distance 3 can correct — the decoder
+# completes the error chain the wrong way, a logical error lands, and the
+# counter ticks. Verified deterministic against the d=3 block at paper noise.
+name: beyond-distance
+description: A burst wider than the code distance defeats the decoder; a logical error lands.
+target: block0
+steps:
+  - at: { shot: 0, round: 2 }
+    inject: { pauli: X, qubits: [1, 8] }

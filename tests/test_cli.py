@@ -13,10 +13,11 @@ def test_no_command_exits() -> None:
         main([])
 
 
-def test_parser_knows_both_commands() -> None:
+def test_parser_knows_all_commands() -> None:
     parser = build_parser()
     assert parser.parse_args(["live"]).command == "live"
     assert parser.parse_args(["batch-curve"]).command == "batch-curve"
+    assert parser.parse_args(["serve"]).command == "serve"
 
 
 def test_live_prints_summary(capsys: pytest.CaptureFixture[str]) -> None:

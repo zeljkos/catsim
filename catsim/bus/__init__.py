@@ -1,0 +1,75 @@
+"""Event schemas (pydantic) and ZeroMQ transport — the system's only runtime coupling.
+
+Every running service publishes and subscribes through these versioned models;
+bulk artifacts travel over the on-request query channel, never in events.
+"""
+
+from catsim.bus.events import (
+    SCHEMA_VERSION,
+    AnyEvent,
+    BlockConfigured,
+    Command,
+    CorrectionApplied,
+    DecodeFinished,
+    DecodeStarted,
+    ErrorInjected,
+    Event,
+    InjectLoss,
+    InjectPauli,
+    IonLost,
+    LogicalError,
+    QubitReplaced,
+    RoundStarted,
+    RunFinished,
+    SetNoiseScale,
+    SetPace,
+    SetPaused,
+    ShotFinished,
+    SyndromeFired,
+    decode_event,
+    encode_event,
+)
+from catsim.bus.query import QueryError, QueryServer, query
+from catsim.bus.transport import (
+    DEFAULT_BACKEND_ADDRESS,
+    DEFAULT_FRONTEND_ADDRESS,
+    BusProxy,
+    EventSink,
+    ZmqPublisher,
+    ZmqSubscriber,
+)
+
+__all__ = [
+    "DEFAULT_BACKEND_ADDRESS",
+    "DEFAULT_FRONTEND_ADDRESS",
+    "SCHEMA_VERSION",
+    "AnyEvent",
+    "BlockConfigured",
+    "BusProxy",
+    "Command",
+    "CorrectionApplied",
+    "DecodeFinished",
+    "DecodeStarted",
+    "ErrorInjected",
+    "Event",
+    "EventSink",
+    "InjectLoss",
+    "InjectPauli",
+    "IonLost",
+    "LogicalError",
+    "QubitReplaced",
+    "QueryError",
+    "QueryServer",
+    "RoundStarted",
+    "RunFinished",
+    "SetNoiseScale",
+    "SetPace",
+    "SetPaused",
+    "ShotFinished",
+    "SyndromeFired",
+    "ZmqPublisher",
+    "ZmqSubscriber",
+    "decode_event",
+    "encode_event",
+    "query",
+]

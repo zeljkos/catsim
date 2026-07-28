@@ -1,0 +1,10 @@
+# The "immune system" moment: one data qubit decoheres (Z error on the center
+# qubit of the d=3 block); the adjacent X-checks fire, the decoder identifies
+# the culprit in one cycle, the correction lands, the logical state survives.
+# Run against the default d=3 block with paper-baseline noise.
+name: single-decoherence
+description: One qubit takes a Z error; syndrome fires, decoder corrects, logical state untouched.
+target: block0
+steps:
+  - at: { shot: 0, round: 2 }
+    inject: { pauli: Z, qubits: [10] }

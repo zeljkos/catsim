@@ -18,6 +18,7 @@ dependencies = [
     "pyzmq",
     "fastapi",
     "uvicorn",
+    "websockets",  # WS protocol for uvicorn: the dashboard event relay needs it
     "pydantic",
     "pyyaml",
     "numpy",
@@ -32,6 +33,7 @@ dev = [
     "import-linter",
     "pre-commit",
     "types-PyYAML",
+    "httpx",  # fastapi.testclient transport
 ]
 
 [project.scripts]
@@ -88,8 +90,9 @@ addopts = "-q"
 # ------------------------------------------------------- import-linter ----
 # CLAUDE.md dependency graph — imports flow only downward:
 #
-#   dashboard  →  bus, machine
+#   dashboard  →  bus, machine, scenario
 #   machine    →  bus, decoder, component
+#   scenario   →  bus
 #   decoder    →  bus, codes
 #   component  →  bus, codes
 #   codes      →  (leaf)
@@ -112,6 +115,7 @@ forbidden_modules = [
     "catsim.machine",
     "catsim.dashboard",
     "catsim.cli",
+    "catsim.scenario",
 ]
 
 [[tool.importlinter.contracts]]
@@ -125,6 +129,7 @@ forbidden_modules = [
     "catsim.machine",
     "catsim.dashboard",
     "catsim.cli",
+    "catsim.scenario",
 ]
 
 [[tool.importlinter.contracts]]
@@ -136,6 +141,7 @@ forbidden_modules = [
     "catsim.machine",
     "catsim.dashboard",
     "catsim.cli",
+    "catsim.scenario",
 ]
 
 [[tool.importlinter.contracts]]
@@ -147,6 +153,7 @@ forbidden_modules = [
     "catsim.machine",
     "catsim.dashboard",
     "catsim.cli",
+    "catsim.scenario",
 ]
 
 [[tool.importlinter.contracts]]
@@ -157,13 +164,14 @@ forbidden_modules = [
     "catsim.codes",
     "catsim.dashboard",
     "catsim.cli",
+    "catsim.scenario",
 ]
 # Reaching codes *through* component/decoder is the layering working as designed;
 # only a direct import would violate the charter graph.
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "dashboard imports only bus and machine"
+name = "dashboard imports only bus, machine, scenario"
 type = "forbidden"
 source_modules = ["catsim.dashboard"]
 forbidden_modules = [
@@ -174,3 +182,16 @@ forbidden_modules = [
 ]
 # Same as machine: only direct imports violate the graph.
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "scenario imports only bus"
+type = "forbidden"
+source_modules = ["catsim.scenario"]
+forbidden_modules = [
+    "catsim.codes",
+    "catsim.component",
+    "catsim.decoder",
+    "catsim.machine",
+    "catsim.dashboard",
+    "catsim.cli",
+]

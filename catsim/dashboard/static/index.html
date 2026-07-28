@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>catsim — walking cat simulator</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>catsim <span class="sub">walking cat simulator</span></h1>
+    <div class="counters">
+      <div class="counter"><span id="c-shots">0</span><label>shots</label></div>
+      <div class="counter alert"><span id="c-logical">0</span><label>logical errors</label></div>
+      <div class="counter"><span id="c-latency">–</span><label>decode</label></div>
+    </div>
+    <div id="conn" title="bus connection">●</div>
+  </header>
+
+  <main>
+    <section class="panel" id="panel-block-view">
+      <div class="panel-head">
+        <h2>block view</h2>
+        <span id="block-sub" class="muted"></span>
+      </div>
+      <svg id="block-svg"></svg>
+      <div id="panel-replay" class="replay">
+        <button id="step-back" title="previous round">◀</button>
+        <input type="range" id="scrub" min="0" max="0" value="0">
+        <button id="step-fwd" title="next round">▶</button>
+        <button id="live-btn" class="active" title="follow live rounds">live</button>
+        <span id="frame-label" class="muted"></span>
+      </div>
+      <div class="legend muted">
+        <span class="chip err">error</span>
+        <span class="chip fired">check fired</span>
+        <span class="chip identified">decoder blame</span>
+        <span class="chip corrected">corrected</span>
+        <span class="chip lost">ion lost</span>
+        <span class="chip logical">logical error</span>
+      </div>
+    </section>
+
+    <aside class="panel" id="panel-injection-console">
+      <div class="panel-head"><h2>injection console</h2></div>
+      <p id="selected-label" class="muted">click a qubit to arm the console</p>
+      <div class="row">
+        <button class="inject-btn" id="inject-x" disabled>X</button>
+        <button class="inject-btn" id="inject-y" disabled>Y</button>
+        <button class="inject-btn" id="inject-z" disabled>Z</button>
+        <button class="inject-btn loss" id="inject-loss" disabled>loss</button>
+      </div>
+      <label class="control">noise scale <span id="noise-value">1.00×</span>
+        <input type="range" id="noise-slider">
+      </label>
+      <label class="control">pace
+        <select id="pace-select"></select>
+      </label>
+      <button id="pause-btn">⏸ pause</button>
+      <div class="control scenario">
+        <label>scenario
+          <select id="scenario-select"></select>
+        </label>
+        <button id="scenario-run">run</button>
+      </div>
+    </aside>
+  </main>
+
+  <section class="panel" id="panel-event-log">
+    <div class="panel-head">
+      <h2>event log</h2>
+      <select id="log-filter">
+        <option value="all">all events</option>
+        <option>round_started</option>
+        <option>error_injected</option>
+        <option>syndrome_fired</option>
+        <option>decode_started</option>
+        <option>decode_finished</option>
+        <option>correction_applied</option>
+        <option>logical_error</option>
+        <option>ion_lost</option>
+        <option>qubit_replaced</option>
+        <option>shot_finished</option>
+        <option>block_configured</option>
+      </select>
+    </div>
+    <div class="log-scroll">
+      <table>
+        <thead><tr><th>event</th><th>source</th><th>shot</th><th>round</th><th>detail</th></tr></thead>
+        <tbody id="log-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="muted">
+    stabilizer + behavioral simulation calibrated to arXiv:2604.19481 · surface-code stand-in (M1)
+  </footer>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

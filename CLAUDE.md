@@ -198,7 +198,8 @@ catsim/
   decoder/      # Layer 2: BP+OSD / pymatching wrappers, throttle, timing harness
   machine/      # Layer 3: simpy model + zmq runtime
   dashboard/    # FastAPI backend + static frontend
-  bus.py        # event schema (pydantic) + zmq topics
+  bus/          # event schema (pydantic), zmq transport, on-request query channel
+  scenario.py   # scripted scenario schema + runner (bus commands on a timeline)
   cli.py        # catsim run --machine ... --noise ... --scenario ...
 configs/
   machine/  noise/  scenarios/  dashboard.yaml

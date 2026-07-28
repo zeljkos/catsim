@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from catsim import codes, component, machine
+from catsim import codes, component, dashboard, machine
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +44,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.006,
         help="pace per SE round; 0.006 = the paper's 6 ms SEC",
     )
+
+    serve = sub.add_parser("serve", help="dashboard v1: live block + decoder + web UI (M1)")
+    serve.add_argument("--distance", type=int, default=3)
+    serve.add_argument("--rounds", type=int, default=10)
+    serve.add_argument("--noise", default="paper-baseline")
+    serve.add_argument("--seed", type=int, default=0)
+    serve.add_argument("--decoder", default="pymatching")
+    serve.add_argument(
+        "--pace-ms",
+        type=float,
+        default=500.0,
+        help="initial slow-motion pace per SE round (adjustable live from the UI)",
+    )
+    serve.add_argument("--dashboard-config", type=Path, default=Path("configs/dashboard.yaml"))
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
     return parser
 
 
@@ -86,6 +102,30 @@ def _cmd_live(args: argparse.Namespace) -> None:
         print(f"  ... {len(report.events) - 50} more events")
 
 
+def _cmd_serve(args: argparse.Namespace) -> None:
+    """Start the live backend and serve the dashboard until interrupted."""
+    import uvicorn
+
+    noise = component.load_noise_model(args.noise)
+    code = codes.get_code("surface", distance=args.distance)
+    spec = component.MemoryBlockSpec(code=code, noise=noise, rounds=args.rounds)
+    backend = machine.LiveBackend(
+        spec, seed=args.seed, tick_seconds=args.pace_ms / 1000.0, decoder_name=args.decoder
+    )
+    backend.start()
+    try:
+        config = dashboard.load_dashboard_config(args.dashboard_config)
+        app = dashboard.create_app(
+            config,
+            frontend_address=backend.frontend_address,
+            backend_address=backend.backend_address,
+        )
+        print(f"dashboard: http://{args.host}:{args.port}  (bus: {backend.backend_address})")
+        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    finally:
+        backend.stop()
+
+
 def main(argv: list[str] | None = None) -> None:
     """Entry point for the ``catsim`` command."""
     args = build_parser().parse_args(argv)
@@ -93,6 +133,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_batch_curve(args)
     elif args.command == "live":
         _cmd_live(args)
+    elif args.command == "serve":
+        _cmd_serve(args)
 
 
 if __name__ == "__main__":

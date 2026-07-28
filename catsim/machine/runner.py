@@ -78,6 +78,7 @@ def run_memory_demo(
     decoder_thread.start()
 
     block_pub = ZmqPublisher(proxy.frontend_address)
+    block: MemoryBlockService | None = None
     try:
         time.sleep(_SLOW_JOINER_S)  # let SUB subscriptions propagate before publishing
         block = MemoryBlockService(spec, block_pub, seed=seed, tick_seconds=tick_seconds)
@@ -87,6 +88,8 @@ def run_memory_demo(
         collector.join(timeout=10.0)
         return _summarize(events, shots, proxy.backend_address)
     finally:
+        if block is not None:
+            block.close()
         block_pub.close()
         decoder_pub.close()
         decoder_sub.close()

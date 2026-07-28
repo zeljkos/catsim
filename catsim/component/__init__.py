@@ -12,16 +12,19 @@ from catsim.component.circuits import (
     register_builder,
     split_into_rounds,
 )
+from catsim.component.geometry import BlockLayout, block_layout
 from catsim.component.noise import DepolarizingNoise, NoiseModel, load_noise_model
 from catsim.component.report import plot_curve
 
 __all__ = [
+    "BlockLayout",
     "CurveCell",
     "DepolarizingNoise",
     "MemoryBlockService",
     "MemoryBlockSpec",
     "NoiseModel",
     "RoundSegments",
+    "block_layout",
     "build_memory_circuit",
     "curve_tasks",
     "load_noise_model",

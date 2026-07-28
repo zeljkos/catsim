@@ -1,2 +1,35 @@
-# Dashboard configuration — panels, layout, refresh rates, plot windows,
-# amber/red thresholds. Populated in M1; this file fixes the canonical location.
+# Dashboard configuration — panels, pacing, buffers, thresholds.
+# Every knob here is read by catsim/dashboard/config.py; no code edits needed.
+
+title: "catsim — walking cat simulator"
+
+# Replay scrubber: how many recent rounds the frontend keeps for stepping back.
+ring_buffer_rounds: 240
+
+# Event log: most recent events kept in the table.
+event_log_limit: 400
+
+# Slow-motion presets offered by the pace control, in milliseconds per
+# syndrome-extraction round. 6 ms is the paper's real SEC (arXiv:2604.19481);
+# 0 means flat out.
+pace_presets_ms: [0, 6, 100, 500, 1000]
+default_pace_ms: 500
+
+# Live noise-scale slider: multiplier applied to every channel of the base
+# noise model (applied at the next shot boundary).
+noise_scale:
+  min: 0.1
+  max: 100.0
+  default: 1.0
+
+panels:
+  block_view: true
+  event_log: true
+  injection_console: true
+  replay: true
+
+# House style (matches the deck/blog).
+machine_accent: "#E8701A"
+workload_accent: "#3B82F6"
+
+scenario_dir: configs/scenarios
