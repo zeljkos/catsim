@@ -1,0 +1,12 @@
+# The reservoir story: an ion vanishes from the trap (qubit 10, center of the
+# d=3 block). The block notices one round later (loss_detected), the qubit
+# factory dispatches a replacement (replacement_dispatched), and two rounds
+# later the fresh ion rejoins (qubit_replaced) — the block re-stabilizes as
+# syndrome extraction projects the newcomer back into the code space, and no
+# logical error lands. Purple -> blinking -> green in the block view.
+name: ion-loss
+description: An ion disappears; loss detected, a replacement is dispatched and rejoins, block re-stabilizes.
+target: block0
+steps:
+  - at: { shot: 0, round: 2 }
+    inject_loss: [10]

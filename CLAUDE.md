@@ -68,9 +68,10 @@ SimPy model of the full machine, calibrated by Layer 1/2 measurements: chips hos
 blocks and factories; Bell links are ZeroMQ messages; a scheduler issues logical instructions
 and tracks queues, stalls, and throughput.
 
-**The chip unit (matches the 2026 device):** 256 physical qubits ≈ two [[70,6,9]] memory
-blocks (6 logical each → 12 logical) + shared cat-factory/routing/reservoir overhead.
-`qubits_per_chip`, blocks-per-chip, and roles are YAML config, never hard-coded.
+**The chip unit (`chip-256`):** 256 physical qubits ≈ two [[70,6,9]] memory blocks
+(6 logical each → 12 logical) + shared cat-factory/routing/reservoir overhead — matches
+the 2026 roadmap device. `qubits_per_chip`, blocks-per-chip, and roles are YAML config,
+never hard-coded.
 
 **Elastic runtime — the machine grows live (this is the core demo mechanic).**
 There is exactly ONE unit of scale: the chip container (one image, one 256-qubit chip
@@ -89,13 +90,21 @@ currently registered:
   `docker` SDK, socket mounted into this one container only). It exposes exactly two
   operations on the bus: `scale_up {n}` and `drain {chip_id | n}`. Dashboard buttons call
   these. Nothing else in the system knows Docker exists.
-- **Machine tiers are just scale targets** (from ionq.com/roadmap, the demo's three acts):
-  1 chip = 2026 (256 physical / 12 logical) → "+39" = 2027 (10,000 / 800) → "+40" = 2028
-  (20,000 / 1,600). For 2028, chips 41–80 join as a second module: inter-module Bell links
-  are marked **photonic interconnect** with distinct higher latency / lower rate, visible
-  in the machine view.
+- **Machines are just scale targets: chip-256 × N.** The unit of scale is `chip-256`
+  (256 physical / 12 logical); a machine is N copies of it, for any N. Past one module's
+  worth of chips (40), further chips join as a second module: inter-module Bell links are
+  marked **photonic interconnect** with distinct higher latency / lower rate, visible in
+  the machine view. The demo's three acts map roadmap years onto N (2026 → N=1,
+  2027 → N=40, 2028 → N=80 two-module), but years are presentation labels only — nothing
+  in machine configs or code knows about them.
 - Fallback for machines without Docker (CI, quick dev): provisioner spawns chips as local
   processes instead — same join protocol, so nothing else changes.
+- **Concurrency warning (M3 finding, applies to M6):** stim lazily imports `numpy.core`
+  submodules on first use; several threads starting services concurrently deterministically
+  deadlocks Python's import machinery (observed py3.14/macOS — hung `catsim serve`). Fixed
+  by a one-draw warmup at module import in `catsim/component/factory.py`. Any component
+  that spawns concurrent services must do the same; chip containers (M6) must warm up stim
+  BEFORE starting service threads.
 
 ### The dashboard (package `catsim/dashboard/`) — first-class product, not an afterthought
 FastAPI + WebSocket backend subscribed to the event bus; single-page frontend. Dark theme,
@@ -108,7 +117,12 @@ orange #E8701A machine accent, blue #3B82F6 workload accent (matches the owner's
   turn the block's border red and increment a logical-error counter. A cycle timeline below
   scrubs back through recent rounds (ring buffer) to replay an event slowly.
 - **Machine view** — topology of chips, factories, Bell links, scheduler; per-node health,
-  queue depths, utilization; amber/red degradation states.
+  queue depths, utilization; amber/red degradation states. Includes a **predicted-vs-measured
+  panel**: the paper's Table I arithmetic, evaluated for the current N and role mix, gives
+  the predicted logical-qubit count and T-gates/day (drawn as the prediction line); live
+  measured values are overlaid on it, and the logical error rate *per logical qubit* is
+  displayed so it is visible whether it stays flat as N grows. Divergence between prediction
+  and measurement is a finding to surface, never something to tune away.
 - **Metrics view** — live charts: logical error rate, decoder latency (p50/p99 vs the 6 ms
   line), T-gate throughput, factory acceptance rates, loss/replacement counts.
 - **Event log** — filterable stream of bus events with timestamps and cycle numbers.
@@ -122,18 +136,22 @@ orange #E8701A machine accent, blue #3B82F6 workload accent (matches the owner's
 - Kill switches: pause/kill any factory, chip, or Bell link; sever/restore network partitions.
 - Decoder on/off toggle (show what "no error correction" looks like — errors accumulate
   unchecked; brutal and instructive).
-- **Scale controls:** "+1 chip", "+N chips", preset buttons for the roadmap tiers
-  (1 → 40 → 80), and drain/remove. Pressing "+20" starts 20 real containers; the machine
-  view animates each one joining, getting a role, and linking in. This is the money moment
-  for scalability — chips must appear one by one as they register, not all at once after a
-  batch completes.
+- **Scale controls:** the primary control is a free numeric input — "build machine of
+  N chips" / "+N chips" — plus drain/remove. Roadmap-year preset buttons (1 → 40 → 80)
+  are optional display sugar defined only in `configs/dashboard.yaml`; they just fill the
+  numeric input, and no year names appear in machine configs or code. Entering "+20" starts
+  20 real containers; the machine view animates each one joining, getting a role, and
+  linking in. This is the money moment for scalability — chips must appear one by one as
+  they register, not all at once after a batch completes.
 
 **Configurability (hard requirement):** everything above is driven by YAML, no code edits:
-- `configs/machine/*.yaml` — machine instances (`chip-2026`, `dc-2027`, `dc-2028`, plus
-  paper Table I configs): chips, qubits/blocks per chip, factories, link latencies.
+- `configs/machine/*.yaml` — machine instances, named for what they are: `chip-256` (the
+  unit, N=1), chip-256 × N variants such as `chip-256-x40`, the two-module variant
+  `chip-256-x80-2mod` (photonic interconnect between modules), plus paper Table I configs:
+  chips, qubits/blocks per chip, factories, link latencies. No roadmap years in names.
 - `configs/noise/*.yaml` — named noise models (paper-baseline, optimistic, pessimistic, custom).
 - `configs/dashboard.yaml` — which panels, layout, refresh rates, plot windows, thresholds
-  for amber/red.
+  for amber/red, and the optional roadmap-year scale presets (the only place years exist).
 - `configs/scenarios/*.yaml` — **scripted, replayable scenarios**: a timeline of injections
   and config changes. Scenarios are the rehearsable demo units.
 
@@ -167,13 +185,14 @@ From arXiv:2604.19481 (cite section per constant in code):
 | T-gate latency / throughput | ~75 ms; ~11–13 T/s ≈ 1M/day per CH2 factory |
 | Reference workload | 100-site Heisenberg, 162 logical / ~10K physical, ~1 month |
 
-From ionq.com/roadmap (the demo's machine tiers):
+From ionq.com/roadmap (the demo's three acts — years are display labels over chip-256 × N
+machines, defined only as presets in `configs/dashboard.yaml`):
 
-| Year | Physical | Logical | Notes |
-|---|---|---|---|
-| 2026 | 100–256+ | 12 | 99.99% physical fidelity, logical error <1e-7 — THE chip |
-| 2027 | 10,000 | 800 | 40× the 2026 chip |
-| 2028 | 20,000 | 1,600 | + photonic interconnect between modules |
+| Year | Machine | Physical | Logical | Notes |
+|---|---|---|---|---|
+| 2026 | chip-256 × 1 | 100–256+ | 12 | 99.99% physical fidelity, logical error <1e-7 — THE chip |
+| 2027 | chip-256 × 40 | 10,000 | 800 | 40× the unit chip |
+| 2028 | chip-256 × 80, 2 modules | 20,000 | 1,600 | + photonic interconnect between modules |
 
 **Reconciliation note (be ready for the question):** Table I's ratio (~21:1 physical:logical)
 targets logical error 1e-10; the roadmap's denser 12.5:1 targets 1e-7. The paper says
@@ -181,6 +200,16 @@ explicitly that more logical qubits are available at a higher target logical err
 The demo's default target is therefore **1e-7** to match the roadmap; a config switch to the
 1e-10 / Table I regime must exist and visibly cost logical qubits — that switch itself is a
 good 30-second demo beat (reliability is purchasable with qubits).
+
+### Measured baselines (M3) — reference numbers, not noise
+
+Factory acceptance rates (seeded, pinned in `tests/component/test_factory.py`):
+noiseless = exactly 100%; paper noise ≈ 99.8–99.97%; 100× noise collapses to 82–94%,
+with ~3% of *accepted* cat/bell outputs carrying undetected errors (truth-oracle metric —
+simulation-only instrumentation, see `factories.py`). These are optimistic upper bounds vs
+the paper's flagged/repeated verification schedules (divergence documented in
+`factories.py`). Treat these as reference baselines: significant drift after a change is a
+regression signal, not noise.
 
 ## Stack
 
@@ -222,16 +251,16 @@ reports/
   (qubit factory replacement) end-to-end.
 - **M4 — Decoder race.** Batch p50/p99 vs 6 ms budget plot; live decoder-latency panel;
   `decoder-overload` scenario. Acceptance: the p99-vs-code-size plot with the 6 ms line.
-- **M5 — One chip (`chip-2026`).** SimPy machine layer for the single 256-qubit / 12-logical
+- **M5 — One chip (`chip-256`).** SimPy machine layer for the single 256-qubit / 12-logical
   chip, calibrated from M2–M4 numbers; machine view; `factory-outage` scenario. Acceptance:
   the full one-chip demo runs end-to-end — Act 1 done.
-- **M6 — Elastic containers to `dc-2027`.** Chip image + join/leave protocol + provisioner;
-  dashboard "+N chips" grows the machine live from 1 to ~40 chips (10,000 physical / 800
-  logical) on one host. Acceptance: Act 2 done — pressing "+39" on stage works every time;
-  killing any chip mid-growth recovers cleanly, 10 consecutive times; T-gates/day with
-  bottleneck attribution.
-- **M7 — `dc-2028` + polish.** "+40" more chips join as a second module over photonic
-  interconnect (distinct latency/rate, visible in machine view) → 20,000 / 1,600;
+- **M6 — Elastic containers to chip-256 × 40.** Chip image + join/leave protocol +
+  provisioner; the dashboard's "+N chips" input grows the machine live from 1 to ~40 chips
+  (10,000 physical / 800 logical) on one host. Acceptance: Act 2 done — growing 1 → 40 on
+  stage works every time; killing any chip mid-growth recovers cleanly, 10 consecutive
+  times; T-gates/day with bottleneck attribution.
+- **M7 — Second module (chip-256 × 80) + polish.** 40 more chips join as a second module
+  over photonic interconnect (distinct latency/rate, visible in machine view) → 20,000 / 1,600;
   `make demo` / `make reset` (<10 s, rehearsable); sensitivity sweeps; report comparing
   measured vs paper and roadmap numbers. Acceptance: all three acts run back-to-back in
   one sitting, driven entirely from dashboard buttons.

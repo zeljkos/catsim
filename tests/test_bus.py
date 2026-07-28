@@ -37,7 +37,26 @@ EVENTS: list[bus.AnyEvent] = [
     bus.ShotFinished(source="b0", shot=0, actual_flips=[0]),
     bus.RunFinished(source="b0", shots=10),
     bus.IonLost(source="b0", qubit=12, shot=0, round=2),
-    bus.QubitReplaced(source="b0", qubit=12, shot=0),
+    bus.QubitReplaced(source="b0", qubit=12, shot=0, round=5),
+    bus.FactoryConfigured(
+        source="cat0", kind="cat", output_qubits=4, verification_checks=3, noise_name="paper"
+    ),
+    bus.FactoryAttempt(source="cat0", attempt=7),
+    bus.FactoryAccepted(
+        source="cat0",
+        attempt=7,
+        attempts=7,
+        accepted=6,
+        acceptance_rate=6 / 7,
+        residual_checks=[0],
+        output_error_rate=1 / 6,
+    ),
+    bus.FactoryRejected(
+        source="magic0", attempt=8, attempts=8, accepted=6, acceptance_rate=0.75, failed_checks=[2]
+    ),
+    bus.LossDetected(source="b0", qubit=12, shot=0, round=3),
+    bus.ReplacementDispatched(source="qf0", qubit=12, block="b0", ready_in_rounds=2),
+    bus.ReplacementReady(source="qf0", target="b0", qubit=12),
     bus.InjectPauli(source="dash", target="b0", qubits=[4], pauli="X"),
     bus.InjectLoss(source="dash", target="b0", qubits=[4]),
     bus.SetNoiseScale(source="dash", target="b0", scale=10.0),
@@ -63,8 +82,9 @@ def test_events_are_frozen() -> None:
 
 
 def test_commands_are_commands() -> None:
+    command_types = ("inject_", "set_", "replacement_ready")
     for event in EVENTS:
-        assert isinstance(event, bus.Command) == event.type.startswith(("inject_", "set_"))
+        assert isinstance(event, bus.Command) == event.type.startswith(command_types)
 
 
 def test_zmq_pub_sub_through_proxy() -> None:

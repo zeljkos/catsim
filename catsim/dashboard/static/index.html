@@ -38,6 +38,8 @@
         <span class="chip identified">decoder blame</span>
         <span class="chip corrected">corrected</span>
         <span class="chip lost">ion lost</span>
+        <span class="chip replacing">replacing</span>
+        <span class="chip replaced">replaced</span>
         <span class="chip logical">logical error</span>
       </div>
     </section>
@@ -70,6 +72,16 @@
     </aside>
   </main>
 
+  <section class="panel" id="panel-factories">
+    <div class="panel-head">
+      <h2>factories</h2>
+      <span class="muted">production · acceptance · recent attempts</span>
+    </div>
+    <div id="factory-tiles" class="tiles">
+      <p class="muted" id="factories-empty">no factories announced yet</p>
+    </div>
+  </section>
+
   <section class="panel" id="panel-event-log">
     <div class="panel-head">
       <h2>event log</h2>
@@ -83,7 +95,14 @@
         <option>correction_applied</option>
         <option>logical_error</option>
         <option>ion_lost</option>
+        <option>loss_detected</option>
+        <option>replacement_dispatched</option>
+        <option>replacement_ready</option>
         <option>qubit_replaced</option>
+        <option>factory_attempt</option>
+        <option>factory_accepted</option>
+        <option>factory_rejected</option>
+        <option>factory_configured</option>
         <option>shot_finished</option>
         <option>block_configured</option>
       </select>

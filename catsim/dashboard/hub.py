@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import threading
 
-from catsim.bus import AnyEvent, BlockConfigured, ZmqSubscriber
+from catsim.bus import AnyEvent, BlockConfigured, FactoryConfigured, ZmqSubscriber
 
 
 class EventHub:
@@ -24,6 +24,7 @@ class EventHub:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.latest_configured: BlockConfigured | None = None
+        self.latest_factories: dict[str, FactoryConfigured] = {}
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """Bind the asyncio loop client queues live on (the web app's loop)."""
@@ -52,6 +53,8 @@ class EventHub:
         """Fan one event out to every client queue (thread-safe)."""
         if isinstance(event, BlockConfigured):
             self.latest_configured = event
+        elif isinstance(event, FactoryConfigured):
+            self.latest_factories[event.source] = event
         payload = event.model_dump_json()
         with self._lock:
             clients = list(self._clients)
@@ -61,10 +64,12 @@ class EventHub:
             self._loop.call_soon_threadsafe(queue.put_nowait, payload)
 
     def register(self) -> asyncio.Queue[str]:
-        """Add a client; it immediately receives the cached block announcement."""
+        """Add a client; it immediately receives the cached announcements."""
         queue: asyncio.Queue[str] = asyncio.Queue()
         if self.latest_configured is not None:
             queue.put_nowait(self.latest_configured.model_dump_json())
+        for factory in self.latest_factories.values():
+            queue.put_nowait(factory.model_dump_json())
         with self._lock:
             self._clients.add(queue)
         return queue

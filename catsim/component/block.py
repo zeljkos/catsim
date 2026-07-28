@@ -22,8 +22,10 @@ from catsim.bus import (
     InjectLoss,
     InjectPauli,
     IonLost,
+    LossDetected,
     QubitReplaced,
     QueryServer,
+    ReplacementReady,
     RoundStarted,
     RunFinished,
     SetNoiseScale,
@@ -41,11 +43,8 @@ from catsim.component.circuits import (
     split_into_rounds,
 )
 from catsim.component.geometry import BlockLayout, block_layout
+from catsim.component.loss import LOSS_DEPOLARIZATION, LossTracker
 from catsim.component.noise import NoiseModel
-
-_LOSS_DEPOLARIZATION = 0.75
-"""A lost ion's qubit is maximally mixed: uniform over {I, X, Y, Z} each round.
-M1 loss model — the qubit factory replacement (M3) will replace re-init."""
 
 _PAUSE_POLL_S = 0.05
 
@@ -98,7 +97,7 @@ class MemoryBlockService:
         self._pending_scale: float | None = None
         self._pending_paulis: list[tuple[str, list[int]]] = []
         self._pending_losses: list[int] = []
-        self._lost: set[int] = set()
+        self._loss = LossTracker()
         self._paused = False
         self._stopped = False
         self._rebuild()
@@ -160,6 +159,8 @@ class MemoryBlockService:
             self._pending_paulis.append((command.pauli, list(command.qubits)))
         elif isinstance(command, InjectLoss):
             self._pending_losses.extend(command.qubits)
+        elif isinstance(command, ReplacementReady):
+            self._loss.mark_ready(command.qubit)
         elif isinstance(command, SetNoiseScale):
             self._pending_scale = command.scale
         elif isinstance(command, SetPace):
@@ -193,9 +194,10 @@ class MemoryBlockService:
                 actual_flips=[int(i) for i in np.flatnonzero(obs)],
             )
         )
-        for qubit in sorted(self._lost):
+        # Shot-end fallback: still-lost ions are replaced at re-initialization
+        # (round=None distinguishes it from the factory's mid-shot path).
+        for qubit in self._loss.reset_shot():
             self._sink.publish(QubitReplaced(source=self._source, qubit=qubit, shot=shot))
-        self._lost.clear()
 
     def _round_prelude(self, shot: int, round_index: int, injectable: bool = True) -> None:
         """Between rounds: honor pause, drain commands, apply injections and loss."""
@@ -223,15 +225,24 @@ class MemoryBlockService:
                     )
                 )
         self._pending_paulis.clear()
-        for qubit in sorted(set(self._pending_losses) & known - self._lost):
-            self._lost.add(qubit)
+        new_losses = set(self._pending_losses) & known
+        self._pending_losses.clear()
+        effects = self._loss.advance(new_losses)
+        for qubit in effects.newly_lost:
             self._sink.publish(
                 IonLost(source=self._source, qubit=qubit, shot=shot, round=round_index)
             )
-        self._pending_losses.clear()
-        if self._lost:
-            targets = " ".join(map(str, sorted(self._lost)))
-            self._sim.do(stim.Circuit(f"DEPOLARIZE1({_LOSS_DEPOLARIZATION}) {targets}"))
+        for qubit in effects.newly_detected:
+            self._sink.publish(
+                LossDetected(source=self._source, qubit=qubit, shot=shot, round=round_index)
+            )
+        for qubit in effects.replaced:
+            self._sink.publish(
+                QubitReplaced(source=self._source, qubit=qubit, shot=shot, round=round_index)
+            )
+        if effects.scramble:
+            targets = " ".join(map(str, effects.scramble))
+            self._sim.do(stim.Circuit(f"DEPOLARIZE1({LOSS_DEPOLARIZATION}) {targets}"))
 
     def _poll_commands(self) -> None:
         """Drain the command subscriber without blocking the tick loop."""

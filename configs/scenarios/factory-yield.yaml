@@ -1,0 +1,20 @@
+# Factory economics made visible: ramp the physical error rate for EVERY
+# component (target "*") and watch the factories panel — cat / Bell / magic
+# acceptance rates collapse as verification post-selection rejects more and
+# more attempts, while accepted outputs carry ever more residual errors.
+# Rounds are the block's (its round_started is the timeline clock); factories
+# apply each rescale at their next attempt.
+name: factory-yield
+description: "noise ramps 1x -> 100x; factory acceptance rates collapse as verification rejects the yield"
+target: "*"
+steps:
+  - at: { shot: 0, round: 0 }
+    set_noise_scale: 1.0    # paper baseline — near-perfect yield
+  - at: { shot: 1, round: 0 }
+    set_noise_scale: 10.0   # 1e-3 — occasional rejects appear
+  - at: { shot: 2, round: 0 }
+    set_noise_scale: 30.0   # 3e-3 — acceptance visibly sags
+  - at: { shot: 3, round: 0 }
+    set_noise_scale: 100.0  # 1e-2 — post-selection discards a large slice
+  - at: { shot: 5, round: 0 }
+    set_noise_scale: 1.0    # back to baseline — yield recovers

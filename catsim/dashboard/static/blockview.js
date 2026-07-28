@@ -56,11 +56,15 @@ export function createBlockView(svg, layout, onSelect) {
     return node;
   }
 
-  const STATES = ["err-x", "err-y", "err-z", "fired", "identified", "corrected", "lost"];
+  const STATES = [
+    "err-x", "err-y", "err-z", "fired", "identified", "corrected",
+    "lost", "replacing", "replaced",
+  ];
 
   // Render one frame: error flashes red, fired checks amber, decoder blame
-  // blue, corrections green, lost ions hollowed out.
-  function render(frame, lost) {
+  // blue, corrections green; lost ions hollow purple, dispatched replacements
+  // pulse, and a rejoined qubit flashes green (the ion-loss recovery beat).
+  function render(frame, lost, replacing) {
     for (const n of nodes.values()) n.group.classList.remove(...STATES);
     if (!frame) return;
     for (const inj of frame.injected) {
@@ -73,6 +77,8 @@ export function createBlockView(svg, layout, onSelect) {
     for (const q of frame.identified) mark(q, "identified");
     for (const q of frame.corrected) mark(q, "corrected");
     for (const q of lost) mark(q, "lost");
+    for (const q of replacing ?? []) mark(q, "replacing");
+    for (const q of frame.replaced ?? []) mark(q, "replaced");
     border.classList.toggle("logical", Boolean(frame.logical));
   }
 

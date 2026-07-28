@@ -2,16 +2,21 @@
 
 Exists as the single source of truth for what services may say to each other;
 changing any model is a breaking change requiring a schema version bump.
+Factory and loss-recovery events live in :mod:`catsim.bus.factory_events`;
+the full discriminated union and wire codec in :mod:`catsim.bus.codec`.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 3
-"""v3: decode_finished.matched_detectors generalizes from matched pairs to
+SCHEMA_VERSION = 4
+"""v4: factory events (configured/attempt/accepted/rejected) and the loss
+recovery path (loss_detected, replacement_dispatched, replacement_ready);
+qubit_replaced carries the round it landed in (mid-shot replacement, M3).
+v3: decode_finished.matched_detectors generalizes from matched pairs to
 detector sets (BP+OSD blames hyperedges, matching blames edges); set_decoder
 command added for runtime decoder swap.
 v2: block_configured carries a query address instead of the inline DEM;
@@ -142,11 +147,16 @@ class IonLost(Event):
 
 
 class QubitReplaced(Event):
-    """A replacement ion was loaded for a lost one (at block re-init until M3)."""
+    """A replacement ion rejoined the block for a lost one.
+
+    ``round`` is set when the replacement landed mid-shot (the M3 factory
+    path); None means the shot-end fallback (no qubit factory answered).
+    """
 
     type: Literal["qubit_replaced"] = "qubit_replaced"
     qubit: int
     shot: int | None = None
+    round: int | None = None
 
 
 class Command(Event):
@@ -196,40 +206,3 @@ class SetDecoder(Command):
 
     type: Literal["set_decoder"] = "set_decoder"
     name: str
-
-
-AnyEvent = Annotated[
-    (
-        BlockConfigured
-        | RoundStarted
-        | ErrorInjected
-        | SyndromeFired
-        | DecodeStarted
-        | DecodeFinished
-        | CorrectionApplied
-        | LogicalError
-        | ShotFinished
-        | RunFinished
-        | IonLost
-        | QubitReplaced
-        | InjectPauli
-        | InjectLoss
-        | SetNoiseScale
-        | SetPace
-        | SetPaused
-        | SetDecoder
-    ),
-    Field(discriminator="type"),
-]
-
-_ADAPTER: TypeAdapter[AnyEvent] = TypeAdapter(AnyEvent)
-
-
-def encode_event(event: AnyEvent) -> bytes:
-    """Serialize an event to JSON bytes for the wire."""
-    return event.model_dump_json().encode()
-
-
-def decode_event(data: bytes) -> AnyEvent:
-    """Parse wire bytes back into the concrete event type via the discriminator."""
-    return _ADAPTER.validate_json(data)

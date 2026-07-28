@@ -94,7 +94,12 @@ class ScenarioStep(BaseModel):
 
 
 class Scenario(BaseModel):
-    """A named, one-line-described timeline of steps against one target block."""
+    """A named, one-line-described timeline of steps against one target.
+
+    ``target: "*"`` broadcasts every command to all components (block and
+    factories alike) and triggers on any component's rounds — the shape the
+    factory-yield sweep needs.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -143,7 +148,8 @@ class ScenarioRunner:
         """Advance on one bus event; returns False when the runner is finished."""
         if isinstance(event, RunFinished):
             return False
-        if isinstance(event, RoundStarted) and event.source == self._scenario.target:
+        target = self._scenario.target
+        if isinstance(event, RoundStarted) and (event.source == target or target == "*"):
             now = (event.shot, event.round)
             for i, step in enumerate(self._scenario.steps):
                 if not self._fired[i] and now >= (step.at.shot, step.at.round):

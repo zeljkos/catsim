@@ -81,8 +81,14 @@ main { display: flex; gap: 1rem; padding: 1rem 1.2rem; align-items: stretch; }
 .identified circle, .identified rect { stroke: var(--workload); stroke-width: 0.12; }
 .corrected circle, .corrected rect { stroke: var(--corrected); stroke-width: 0.12; animation: pulse 0.9s ease-out; }
 .lost circle { fill: none; stroke: var(--lost); stroke-dasharray: 0.1 0.06; }
+.replacing circle {
+  fill: none; stroke: var(--lost); stroke-width: 0.09; stroke-dasharray: 0.1 0.06;
+  animation: blink 0.8s ease-in-out infinite alternate;
+}
+.replaced circle { fill: var(--corrected); animation: pulse 0.9s ease-out; }
 
 @keyframes pulse { from { opacity: 0.25; } to { opacity: 1; } }
+@keyframes blink { from { opacity: 0.35; } to { opacity: 1; } }
 
 .legend { display: flex; gap: 0.9rem; margin-top: 0.5rem; flex-wrap: wrap; }
 .chip::before { content: "●"; margin-right: 0.3rem; }
@@ -91,6 +97,8 @@ main { display: flex; gap: 1rem; padding: 1rem 1.2rem; align-items: stretch; }
 .chip.identified::before { color: var(--workload); }
 .chip.corrected::before { color: var(--corrected); }
 .chip.lost::before { color: var(--lost); }
+.chip.replacing::before { color: var(--lost); content: "◌"; }
+.chip.replaced::before { color: var(--corrected); }
 .chip.logical::before { color: var(--err); content: "▢"; }
 
 /* ---- replay ---- */
@@ -121,6 +129,31 @@ button.active { border-color: var(--machine); color: var(--machine); }
 .control input[type="range"] { accent-color: var(--workload); }
 .control.scenario { flex-direction: row; align-items: end; gap: 0.5rem; }
 .control.scenario label { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; }
+
+/* ---- factories ---- */
+#panel-factories { margin: 0 1.2rem 1rem; }
+.tiles { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+.tile {
+  background: #131720;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  min-width: 240px;
+  flex: 1;
+}
+.tile-head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem; }
+.tile-name { color: var(--machine); font-weight: bold; }
+.tile-kind { font-size: 0.72rem; }
+.tile-stats { display: flex; gap: 1.1rem; margin-bottom: 0.4rem; }
+.tile-stat { text-align: center; }
+.tile-stat span { font-size: 1.05rem; color: var(--workload); }
+.tile-stat label { display: block; font-size: 0.65rem; color: var(--muted); }
+.tile-strip { display: flex; gap: 0.15rem; min-height: 0.5rem; margin-bottom: 0.3rem; }
+.tile-strip .dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; }
+.tile-strip .dot.ok { background: var(--corrected); }
+.tile-strip .dot.residual { background: var(--fired); }
+.tile-strip .dot.reject { background: var(--err); }
+.tile-note { font-size: 0.72rem; min-height: 1em; }
 
 /* ---- event log ---- */
 #panel-event-log { margin: 0 1.2rem 1rem; }

@@ -33,6 +33,7 @@ class PanelsConfig(BaseModel):
     event_log: bool = True
     injection_console: bool = True
     replay: bool = True
+    factories: bool = True
 
 
 class DashboardConfig(BaseModel):

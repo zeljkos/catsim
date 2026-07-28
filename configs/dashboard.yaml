@@ -27,6 +27,19 @@ panels:
   event_log: true
   injection_console: true
   replay: true
+  factories: true
+
+# Scale-control presets (optional display sugar, arrives with the machine view).
+# The primary control is always the free numeric "build machine of N chips" / "+N chips"
+# input; a preset button just fills that input. Roadmap years exist ONLY here — machine
+# configs and code are year-agnostic (chip-256 × N).
+scale_presets:
+  - label: "2026 — 1 chip"
+    chips: 1
+  - label: "2027 — 40 chips"
+    chips: 40
+  - label: "2028 — 80 chips (2 modules)"
+    chips: 80
 
 # House style (matches the deck/blog).
 machine_accent: "#E8701A"

@@ -20,20 +20,46 @@ from catsim.component.circuits import (
     split_into_rounds,
 )
 from catsim.component.css import build_css_memory
+from catsim.component.factories import (
+    build_bell_factory,
+    build_cat_factory,
+    build_magic_factory,
+)
+from catsim.component.factory import (
+    FactoryCircuit,
+    FactoryService,
+    FactorySpec,
+    available_factories,
+    build_factory_circuit,
+    register_factory,
+)
 from catsim.component.geometry import BlockLayout, block_layout
+from catsim.component.loss import LossRoundEffects, LossTracker
 from catsim.component.noise import DepolarizingNoise, NoiseModel, load_noise_model
+from catsim.component.qubit_factory import QubitFactoryService
 from catsim.component.report import plot_curve, plot_rate_curve
 
 __all__ = [
     "BlockLayout",
     "CurveCell",
     "DepolarizingNoise",
+    "FactoryCircuit",
+    "FactoryService",
+    "FactorySpec",
+    "LossRoundEffects",
+    "LossTracker",
     "MemoryBlockService",
     "MemoryBlockSpec",
     "NoiseModel",
+    "QubitFactoryService",
     "RoundSegments",
+    "available_factories",
     "block_layout",
+    "build_bell_factory",
+    "build_cat_factory",
     "build_css_memory",
+    "build_factory_circuit",
+    "build_magic_factory",
     "build_memory_circuit",
     "code_curve_tasks",
     "curve_tasks",
@@ -42,6 +68,7 @@ __all__ = [
     "plot_curve",
     "plot_rate_curve",
     "register_builder",
+    "register_factory",
     "run_curve",
     "split_into_rounds",
     "write_curve_csv",

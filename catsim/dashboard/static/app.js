@@ -3,8 +3,14 @@
 // Renders events and posts commands — zero physics by charter.
 
 import { createBlockView } from "/static/blockview.js";
+import { createFactoriesPanel } from "/static/factories.js";
 
 const $ = (id) => document.getElementById(id);
+
+const factoriesPanel = createFactoriesPanel(
+  () => $("factory-tiles"),
+  () => $("factories-empty"),
+);
 
 let cfg = null;
 let layout = null;
@@ -16,11 +22,13 @@ let selectedQubit = null;
 const frames = [];
 let follow = true;
 const lost = new Set();
+const replacing = new Set();
 const counters = { shots: 0, logicalErrors: 0, latencyMs: null };
 
 function newFrame(shot, round) {
   const frame = {
-    shot, round, injected: [], fired: [], identified: [], corrected: [], logical: false,
+    shot, round,
+    injected: [], fired: [], identified: [], corrected: [], replaced: [], logical: false,
   };
   frames.push(frame);
   if (frames.length > cfg.ring_buffer_rounds) frames.shift();
@@ -37,7 +45,7 @@ function frameAt(shot, round) {
 function renderFrame(index) {
   if (!view || !frames.length) return;
   const i = Math.max(0, Math.min(index, frames.length - 1));
-  view.render(frames[i], lost);
+  view.render(frames[i], lost, replacing);
   $("scrub").max = frames.length - 1;
   $("scrub").value = i;
   $("frame-label").textContent = `shot ${frames[i].shot} · round ${frames[i].round}`;
@@ -96,9 +104,23 @@ async function onEvent(ev) {
       lost.add(ev.qubit);
       renderLive();
       break;
-    case "qubit_replaced":
-      lost.delete(ev.qubit);
+    case "replacement_dispatched":
+      if (ev.block === blockId) replacing.add(ev.qubit);
       renderLive();
+      break;
+    case "qubit_replaced": {
+      lost.delete(ev.qubit);
+      replacing.delete(ev.qubit);
+      const f = ev.round === null ? frames[frames.length - 1] : frameAt(ev.shot, ev.round);
+      if (f) f.replaced.push(ev.qubit);
+      renderLive();
+      break;
+    }
+    case "factory_configured":
+    case "factory_attempt":
+    case "factory_accepted":
+    case "factory_rejected":
+      factoriesPanel.onEvent(ev);
       break;
   }
   updateCounters();
@@ -168,7 +190,8 @@ function wireConsole() {
     $("noise-value").textContent = `${Math.pow(10, slider.value).toFixed(2)}× (pending)`;
   });
   slider.addEventListener("change", () =>
-    sendCommand({ type: "set_noise_scale", scale: Math.pow(10, slider.value) }));
+    // target "*": the block AND every factory rescale together (yield story)
+    sendCommand({ type: "set_noise_scale", scale: Math.pow(10, slider.value), target: "*" }));
 
   const pace = $("pace-select");
   for (const ms of cfg.pace_presets_ms) {
@@ -179,7 +202,7 @@ function wireConsole() {
     pace.appendChild(opt);
   }
   pace.addEventListener("change", () =>
-    sendCommand({ type: "set_pace", tick_seconds: Number(pace.value) / 1000 }));
+    sendCommand({ type: "set_pace", tick_seconds: Number(pace.value) / 1000, target: "*" }));
 
   const decoderSelect = $("decoder-select");
   for (const name of cfg.decoders ?? []) {
@@ -199,7 +222,7 @@ function wireConsole() {
     paused = !paused;
     $("pause-btn").textContent = paused ? "▶ resume" : "⏸ pause";
     $("pause-btn").classList.toggle("active", paused);
-    sendCommand({ type: "set_paused", paused });
+    sendCommand({ type: "set_paused", paused, target: "*" });
   });
 
   $("scenario-run").addEventListener("click", async () => {

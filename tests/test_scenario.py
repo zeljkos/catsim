@@ -8,12 +8,17 @@ from catsim.bus import (
     CorrectionApplied,
     ErrorInjected,
     InjectPauli,
+    IonLost,
     LogicalError,
+    LossDetected,
+    QubitReplaced,
+    ReplacementDispatched,
     RoundStarted,
+    SetNoiseScale,
     SyndromeFired,
 )
 from catsim.codes import get_code
-from catsim.component import MemoryBlockService, MemoryBlockSpec
+from catsim.component import MemoryBlockService, MemoryBlockSpec, QubitFactoryService
 from catsim.decoder import DecoderService
 from catsim.scenario import Scenario, ScenarioRunner, list_scenarios, load_scenario
 from tests.conftest import REPO_ROOT, ListSink
@@ -24,8 +29,7 @@ SCENARIO_DIR = REPO_ROOT / "configs" / "scenarios"
 def test_shipped_scenarios_load() -> None:
     scenarios = list_scenarios(SCENARIO_DIR)
     names = [s.name for s in scenarios]
-    assert "single-decoherence" in names
-    assert "beyond-distance" in names
+    assert {"single-decoherence", "beyond-distance", "ion-loss", "factory-yield"} <= set(names)
     assert all(s.description for s in scenarios)
 
 
@@ -83,8 +87,25 @@ class _CommandPipe:
         self._block.handle_command(event)
 
 
-def _run_scenario(name: str, paper_noise: object) -> list[AnyEvent]:
-    """Block + decoder + scenario wired synchronously in memory; returns all events."""
+class _CommandRouter:
+    """Qubit-factory sink: commands go straight to the block, events to the fanout."""
+
+    def __init__(self, fan: _Fanout, block: MemoryBlockService) -> None:
+        self._fan = fan
+        self._block = block
+
+    def publish(self, event: AnyEvent) -> None:
+        if isinstance(event, Command):
+            self._fan.events.append(event)
+            self._block.handle_command(event)
+        else:
+            self._fan.publish(event)
+
+
+def _run_scenario(
+    name: str, paper_noise: object, *, with_qubit_factory: bool = False
+) -> list[AnyEvent]:
+    """Block + decoder (+ qubit factory) + scenario wired synchronously in memory."""
     spec = MemoryBlockSpec(code=get_code("surface", distance=3), noise=paper_noise, rounds=8)  # type: ignore[arg-type]
     fan = _Fanout()
     block = MemoryBlockService(spec, fan, seed=1)
@@ -92,6 +113,9 @@ def _run_scenario(name: str, paper_noise: object) -> list[AnyEvent]:
         decoder = DecoderService(fan)
         runner = ScenarioRunner(load_scenario(name, SCENARIO_DIR), _CommandPipe(block))
         fan.handlers = [runner.handle, decoder.handle]
+        if with_qubit_factory:
+            factory = QubitFactoryService(_CommandRouter(fan, block))
+            fan.handlers.append(factory.handle)
         block.configure()
         block.run(2)
     finally:
@@ -121,3 +145,32 @@ def test_beyond_distance_lands_a_logical_error(paper_noise: object) -> None:
     assert [e for e in events if isinstance(e, LogicalError)], (
         "a burst wider than the distance must defeat the decoder"
     )
+
+
+def test_ion_loss_recovers_end_to_end(paper_noise: object) -> None:
+    """M3 acceptance: loss -> detection -> dispatch -> mid-shot rejoin, no logical error."""
+    events = _run_scenario("ion-loss", paper_noise, with_qubit_factory=True)
+    assert [e.qubit for e in events if isinstance(e, IonLost)] == [10]
+    detected = [e for e in events if isinstance(e, LossDetected)]
+    dispatched = [e for e in events if isinstance(e, ReplacementDispatched)]
+    replaced = [e for e in events if isinstance(e, QubitReplaced)]
+    assert [e.qubit for e in detected] == [10]
+    assert [(e.qubit, e.block) for e in dispatched] == [(10, "block0")]
+    assert [e.qubit for e in replaced] == [10]
+    assert replaced[0].round is not None, "the factory path replaces mid-shot"
+    assert not [e for e in events if isinstance(e, LogicalError)], (
+        "loss recovery within the code distance must not cost a logical qubit"
+    )
+
+
+def test_factory_yield_broadcasts_noise_steps(list_sink: ListSink) -> None:
+    scenario = load_scenario("factory-yield", SCENARIO_DIR)
+    assert scenario.target == "*"
+    runner = ScenarioRunner(scenario, list_sink)
+    # "*" scenarios trigger on any component's rounds and broadcast commands.
+    runner.handle(RoundStarted(source="block0", shot=0, round=0))
+    (command,) = list_sink.events
+    assert isinstance(command, SetNoiseScale)
+    assert command.target == "*"
+    runner.handle(RoundStarted(source="block0", shot=5, round=0))
+    assert runner.done

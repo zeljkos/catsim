@@ -16,6 +16,7 @@ def test_shipped_config_loads() -> None:
     assert config.ring_buffer_rounds >= 2
     assert 6 in config.pace_presets_ms, "the paper's real SEC must be a preset"
     assert config.machine_accent == "#E8701A"
+    assert config.panels.factories is True, "M3: the factories panel ships enabled"
 
 
 @pytest.fixture
@@ -101,5 +102,23 @@ def test_hub_fanout_and_bootstrap_replay() -> None:
         await asyncio.sleep(0)  # let call_soon_threadsafe land
         assert "round_started" in await asyncio.wait_for(queue.get(), 1.0)
         hub.unregister(queue)
+
+    asyncio.run(scenario())
+
+
+def test_hub_replays_factory_announcements_to_late_joiners() -> None:
+    import asyncio
+
+    from catsim.bus import FactoryConfigured
+
+    async def scenario() -> None:
+        hub = EventHub()
+        hub.attach_loop(asyncio.get_running_loop())
+        hub.dispatch(
+            FactoryConfigured(source="cat0", kind="cat", output_qubits=4, verification_checks=3)
+        )
+        late = hub.register()
+        assert "factory_configured" in late.get_nowait()
+        hub.unregister(late)
 
     asyncio.run(scenario())

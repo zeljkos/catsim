@@ -12,7 +12,7 @@ from typing import Protocol
 
 import zmq
 
-from catsim.bus.events import AnyEvent, decode_event, encode_event
+from catsim.bus.codec import AnyEvent, decode_event, encode_event
 
 DEFAULT_FRONTEND_ADDRESS = "tcp://127.0.0.1:5561"
 """Where publishers connect (the proxy's XSUB side)."""

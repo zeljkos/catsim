@@ -4,9 +4,9 @@ Every running service publishes and subscribes through these versioned models;
 bulk artifacts travel over the on-request query channel, never in events.
 """
 
+from catsim.bus.codec import AnyEvent, decode_event, encode_event
 from catsim.bus.events import (
     SCHEMA_VERSION,
-    AnyEvent,
     BlockConfigured,
     Command,
     CorrectionApplied,
@@ -27,8 +27,15 @@ from catsim.bus.events import (
     SetPaused,
     ShotFinished,
     SyndromeFired,
-    decode_event,
-    encode_event,
+)
+from catsim.bus.factory_events import (
+    FactoryAccepted,
+    FactoryAttempt,
+    FactoryConfigured,
+    FactoryRejected,
+    LossDetected,
+    ReplacementDispatched,
+    ReplacementReady,
 )
 from catsim.bus.query import QueryError, QueryServer, query
 from catsim.bus.transport import (
@@ -54,18 +61,25 @@ __all__ = [
     "ErrorInjected",
     "Event",
     "EventSink",
+    "FactoryAccepted",
+    "FactoryAttempt",
+    "FactoryConfigured",
+    "FactoryRejected",
     "InjectLoss",
     "InjectPauli",
     "IonLost",
     "LogicalError",
+    "LossDetected",
     "QubitReplaced",
     "QueryError",
     "QueryServer",
+    "ReplacementDispatched",
+    "ReplacementReady",
     "RoundStarted",
     "RunFinished",
+    "SetDecoder",
     "SetNoiseScale",
     "SetPace",
-    "SetDecoder",
     "SetPaused",
     "ShotFinished",
     "SyndromeFired",
