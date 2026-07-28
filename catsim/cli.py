@@ -9,7 +9,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from catsim import codes, component, dashboard, machine
+from catsim import codes, component, dashboard, decoder, machine
+
+_DEFAULT_DECODER = {"surface": "pymatching", "gb": "bposd"}
+"""Family-appropriate default: matching needs a graphlike DEM, which qLDPC
+hyperedges never decompose into; BP+OSD consumes any DEM."""
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,7 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="catsim", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    curve = sub.add_parser("batch-curve", help="logical-error-vs-distance curve (M0)")
+    curve = sub.add_parser("batch-curve", help="batch logical-error curve (M0/M2)")
+    curve.add_argument("--family", choices=sorted(codes.available_codes()), default="surface")
     curve.add_argument("--distances", type=int, nargs="+", default=[3, 5, 7])
     curve.add_argument(
         "--scales",
@@ -27,13 +32,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="noise multipliers applied to the base model",
     )
     curve.add_argument("--noise", default="paper-baseline")
+    curve.add_argument("--decoder", default=None, help="default: family-appropriate")
     curve.add_argument("--max-shots", type=int, default=2_000_000)
     curve.add_argument("--max-errors", type=int, default=200)
     curve.add_argument("--workers", type=int, default=8)
     curve.add_argument("--out-dir", type=Path, default=Path("reports"))
 
     live = sub.add_parser("live", help="run a live memory block + decoder on the bus")
-    live.add_argument("--distance", type=int, default=3)
+    live.add_argument("--code", choices=sorted(codes.available_codes()), default="surface")
+    live.add_argument("--distance", type=int, default=3, help="surface family only")
+    live.add_argument("--decoder", default=None, help="default: family-appropriate")
     live.add_argument("--rounds", type=int, default=10)
     live.add_argument("--shots", type=int, default=10)
     live.add_argument("--noise", default="pessimistic")
@@ -45,12 +53,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="pace per SE round; 0.006 = the paper's 6 ms SEC",
     )
 
-    serve = sub.add_parser("serve", help="dashboard v1: live block + decoder + web UI (M1)")
-    serve.add_argument("--distance", type=int, default=3)
+    serve = sub.add_parser("serve", help="dashboard: live block + decoder + web UI")
+    serve.add_argument("--code", choices=sorted(codes.available_codes()), default="surface")
+    serve.add_argument("--distance", type=int, default=3, help="surface family only")
+    serve.add_argument("--decoder", default=None, help="default: family-appropriate")
     serve.add_argument("--rounds", type=int, default=10)
     serve.add_argument("--noise", default="paper-baseline")
     serve.add_argument("--seed", type=int, default=0)
-    serve.add_argument("--decoder", default="pymatching")
     serve.add_argument(
         "--pace-ms",
         type=float,
@@ -63,17 +72,59 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _resolve_code(args: argparse.Namespace) -> codes.QECCode:
+    """Build the selected code (distance applies to the surface family only)."""
+    if args.code == "surface":
+        return codes.get_code("surface", distance=args.distance)
+    return codes.get_code(args.code)
+
+
+def _resolve_decoder(family: str, requested: str | None) -> str:
+    """The requested decoder, or the family-appropriate default."""
+    return requested or _DEFAULT_DECODER.get(family, "pymatching")
+
+
 def _cmd_batch_curve(args: argparse.Namespace) -> None:
-    """Collect the M0 curve and write CSV + PNG under the reports directory."""
+    """Collect the batch curve and write CSV + PNG under the reports directory."""
     noise = component.load_noise_model(args.noise)
-    tasks = component.curve_tasks(args.distances, args.scales, noise)
+    decoder_name = _resolve_decoder(args.family, args.decoder)
+    if args.family == "surface":
+        tasks = component.curve_tasks(args.distances, args.scales, noise)
+    else:
+        tasks = component.code_curve_tasks([codes.get_code(args.family)], args.scales, noise)
     cells = component.run_curve(
-        tasks, max_shots=args.max_shots, max_errors=args.max_errors, num_workers=args.workers
+        tasks,
+        decoder=decoder_name,
+        custom_decoders=decoder.sinter_decoders(),
+        max_shots=args.max_shots,
+        max_errors=args.max_errors,
+        num_workers=args.workers,
     )
-    csv_path = args.out_dir / "m0_logical_error_vs_distance.csv"
-    png_path = args.out_dir / "m0_logical_error_vs_distance.png"
+    _write_curve_outputs(args, cells, decoder_name)
+
+
+def _write_curve_outputs(
+    args: argparse.Namespace, cells: list[component.CurveCell], decoder_name: str
+) -> None:
+    """Write CSV + the family-appropriate plot, then print the cells."""
+    if args.family == "surface":
+        stem = "m0_logical_error_vs_distance"
+    else:
+        stem = f"m2_{args.family}_logical_error_vs_p"
+    csv_path = args.out_dir / f"{stem}.csv"
+    png_path = args.out_dir / f"{stem}.png"
     component.write_curve_csv(cells, csv_path)
-    component.plot_curve(cells, png_path)
+    if args.family == "surface":
+        component.plot_curve(cells, png_path)
+    else:
+        code = codes.get_code(args.family)
+        n, k, d = code.num_data_qubits, code.num_logical, code.distance
+        component.plot_rate_curve(
+            cells,
+            png_path,
+            label=f"{code.name} [[{n},{k},{d}]] + {decoder_name}",
+            title=f"Logical error vs physical error — {code.name}, {decoder_name}",
+        )
     for c in cells:
         print(
             f"d={c.distance}  p2q={c.physical_error:g}  "
@@ -85,10 +136,14 @@ def _cmd_batch_curve(args: argparse.Namespace) -> None:
 def _cmd_live(args: argparse.Namespace) -> None:
     """Run the single-block live demo and print the bus-event tallies."""
     noise = component.load_noise_model(args.noise)
-    code = codes.get_code("surface", distance=args.distance)
+    code = _resolve_code(args)
     spec = component.MemoryBlockSpec(code=code, noise=noise, rounds=args.rounds)
     report = machine.run_memory_demo(
-        spec, shots=args.shots, seed=args.seed, tick_seconds=args.tick_seconds
+        spec,
+        shots=args.shots,
+        seed=args.seed,
+        tick_seconds=args.tick_seconds,
+        decoder_name=_resolve_decoder(code.family, args.decoder),
     )
     print(f"bus backend: {report.backend_address}")
     print(
@@ -107,10 +162,14 @@ def _cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
     noise = component.load_noise_model(args.noise)
-    code = codes.get_code("surface", distance=args.distance)
+    code = _resolve_code(args)
     spec = component.MemoryBlockSpec(code=code, noise=noise, rounds=args.rounds)
+    decoder_name = _resolve_decoder(code.family, args.decoder)
     backend = machine.LiveBackend(
-        spec, seed=args.seed, tick_seconds=args.pace_ms / 1000.0, decoder_name=args.decoder
+        spec,
+        seed=args.seed,
+        tick_seconds=args.pace_ms / 1000.0,
+        decoder_name=decoder_name,
     )
     backend.start()
     try:
@@ -119,6 +178,8 @@ def _cmd_serve(args: argparse.Namespace) -> None:
             config,
             frontend_address=backend.frontend_address,
             backend_address=backend.backend_address,
+            decoders=decoder.available_decoders(),
+            active_decoder=decoder_name,
         )
         print(f"dashboard: http://{args.host}:{args.port}  (bus: {backend.backend_address})")
         uvicorn.run(app, host=args.host, port=args.port, log_level="warning")

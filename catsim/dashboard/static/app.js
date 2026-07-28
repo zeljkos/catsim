@@ -57,6 +57,8 @@ async function onEvent(ev) {
       $("block-sub").textContent =
         `${ev.code_name} · d=${ev.distance} · ${ev.num_data_qubits} data qubits · ` +
         `${ev.num_logical} logical · noise ${ev.noise_name}`;
+      // display formatting of two announced numbers, like ms below — no physics
+      $("c-ratio").textContent = (ev.num_data_qubits / ev.num_logical).toFixed(1);
       $("noise-slider").value = Math.log10(ev.noise_scale);
       $("noise-value").textContent = `${ev.noise_scale.toFixed(2)}×`;
       await loadLayout();
@@ -178,6 +180,19 @@ function wireConsole() {
   }
   pace.addEventListener("change", () =>
     sendCommand({ type: "set_pace", tick_seconds: Number(pace.value) / 1000 }));
+
+  const decoderSelect = $("decoder-select");
+  for (const name of cfg.decoders ?? []) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === cfg.active_decoder) opt.selected = true;
+    decoderSelect.appendChild(opt);
+  }
+  decoderSelect.closest("label").classList.toggle("hidden", !(cfg.decoders ?? []).length);
+  decoderSelect.addEventListener("change", () =>
+    // target "*": the decoder service id is not the block id
+    sendCommand({ type: "set_decoder", name: decoderSelect.value, target: "*" }));
 
   let paused = false;
   $("pause-btn").addEventListener("click", () => {

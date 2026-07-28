@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import stim
 
-from catsim.component.circuits import split_into_rounds
+from catsim.component.circuits import memory_detector_error_model, split_into_rounds
 
 
 @dataclass(frozen=True)
@@ -101,8 +101,10 @@ def _edge_qubits(circuit: stim.Circuit, data: set[int]) -> dict[frozenset[int], 
     Explanations are keyed by their full detector set (stim dedupes them);
     each decomposed error splits into components at separators, and every
     component (at most two detectors) inherits the error's culprit qubits.
+    qLDPC hyperedges never decompose, so each is one component keyed whole —
+    the same detector sets a BP+OSD decoder blames.
     """
-    dem = circuit.detector_error_model(decompose_errors=True)
+    dem = memory_detector_error_model(circuit)
     explained = circuit.explain_detector_error_model_errors(
         dem_filter=dem, reduce_to_one_representative_error=True
     )

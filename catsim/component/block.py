@@ -34,7 +34,12 @@ from catsim.bus import (
     ZmqSubscriber,
 )
 from catsim.codes import QECCode
-from catsim.component.circuits import RoundSegments, build_memory_circuit, split_into_rounds
+from catsim.component.circuits import (
+    RoundSegments,
+    build_memory_circuit,
+    memory_detector_error_model,
+    split_into_rounds,
+)
 from catsim.component.geometry import BlockLayout, block_layout
 from catsim.component.noise import NoiseModel
 
@@ -112,7 +117,7 @@ class MemoryBlockService:
         self._noise_name = noise.name
         self._circuit = build_memory_circuit(self._spec.code, noise, self._spec.rounds)
         self._segments: RoundSegments = split_into_rounds(self._circuit)
-        self._dem = self._circuit.detector_error_model(decompose_errors=True)
+        self._dem = memory_detector_error_model(self._circuit)
         self._layout: BlockLayout = block_layout(self._circuit)
 
     def configure(self) -> None:

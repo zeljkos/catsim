@@ -13,6 +13,7 @@
       <div class="counter"><span id="c-shots">0</span><label>shots</label></div>
       <div class="counter alert"><span id="c-logical">0</span><label>logical errors</label></div>
       <div class="counter"><span id="c-latency">–</span><label>decode</label></div>
+      <div class="counter"><span id="c-ratio">–</span><label>qubits / logical</label></div>
     </div>
     <div id="conn" title="bus connection">●</div>
   </header>
@@ -56,6 +57,9 @@
       <label class="control">pace
         <select id="pace-select"></select>
       </label>
+      <label class="control">decoder
+        <select id="decoder-select"></select>
+      </label>
       <button id="pause-btn">⏸ pause</button>
       <div class="control scenario">
         <label>scenario
@@ -93,7 +97,7 @@
   </section>
 
   <footer class="muted">
-    stabilizer + behavioral simulation calibrated to arXiv:2604.19481 · surface-code stand-in (M1)
+    stabilizer + behavioral simulation calibrated to arXiv:2604.19481
   </footer>
 
   <script type="module" src="/static/app.js"></script>

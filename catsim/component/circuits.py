@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import stim
 
 from catsim.codes import QECCode
+from catsim.component.css import build_css_memory
 from catsim.component.noise import NoiseModel
 
 CircuitBuilder = Callable[[QECCode, NoiseModel, int], stim.Circuit]
@@ -63,7 +64,26 @@ def _build_surface_memory(code: QECCode, noise: NoiseModel, rounds: int) -> stim
     )
 
 
+def _build_gb_memory(code: QECCode, noise: NoiseModel, rounds: int) -> stim.Circuit:
+    """GB memory (Z basis) through the generic CSS builder."""
+    return build_css_memory(code, noise, rounds, basis="Z")
+
+
 register_builder("surface", _build_surface_memory)
+register_builder("gb", _build_gb_memory)
+
+
+def memory_detector_error_model(circuit: stim.Circuit) -> stim.DetectorErrorModel:
+    """The circuit's DEM, decomposed into graphlike edges when possible.
+
+    Matching decoders need the decomposition; qLDPC circuits have hyperedge
+    error mechanisms stim cannot decompose, so those fall back to the plain
+    DEM (which BP+OSD consumes natively).
+    """
+    try:
+        return circuit.detector_error_model(decompose_errors=True)
+    except ValueError:
+        return circuit.detector_error_model()
 
 
 @dataclass(frozen=True)

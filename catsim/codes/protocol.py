@@ -9,6 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+import numpy as np
+import numpy.typing as npt
+
 
 @runtime_checkable
 class QECCode(Protocol):
@@ -37,6 +40,35 @@ class QECCode(Protocol):
     @property
     def num_logical(self) -> int:
         """Number of logical qubits the code encodes."""
+        ...
+
+
+@runtime_checkable
+class CSSCode(QECCode, Protocol):
+    """A code that additionally exposes CSS check matrices and logical operators.
+
+    Exists so one generic syndrome-extraction circuit builder serves every CSS
+    code (GB now, further qLDPC families later) with zero edits elsewhere.
+    """
+
+    @property
+    def hx(self) -> npt.NDArray[np.uint8]:
+        """X-check matrix (checks x data qubits), possibly overcomplete."""
+        ...
+
+    @property
+    def hz(self) -> npt.NDArray[np.uint8]:
+        """Z-check matrix (checks x data qubits), possibly overcomplete."""
+        ...
+
+    @property
+    def logical_z(self) -> npt.NDArray[np.uint8]:
+        """K logical-Z representatives, one per row."""
+        ...
+
+    @property
+    def logical_x(self) -> npt.NDArray[np.uint8]:
+        """K logical-X representatives, one per row."""
         ...
 
 

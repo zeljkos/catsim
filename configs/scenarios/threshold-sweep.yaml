@@ -1,0 +1,23 @@
+# The Moore-Shannon staircase, live: ramp the physical error rate across shots
+# and watch the logical error rate collapse below threshold, then explode past
+# it (Aharonov-Ben-Or made visible). Run on the Q102 qLDPC block:
+#   catsim serve --code gb
+# Each step applies at the next shot boundary (the block rebuilds its circuit).
+name: threshold-sweep
+description: "physical error slider ramps 0.5x -> 100x; logical errors collapse, then explode past threshold"
+target: block0
+steps:
+  - at: { shot: 0, round: 0 }
+    set_noise_scale: 0.5    # p2q = 5e-5 — deep below threshold, silence
+  - at: { shot: 2, round: 0 }
+    set_noise_scale: 2.0    # 2e-4 — occasional syndromes, all corrected
+  - at: { shot: 4, round: 0 }
+    set_noise_scale: 5.0    # 5e-4 — busy syndromes, still corrected
+  - at: { shot: 6, round: 0 }
+    set_noise_scale: 10.0   # 1e-3 — decoder works hard, rare logical errors
+  - at: { shot: 8, round: 0 }
+    set_noise_scale: 30.0   # 3e-3 — crossing the staircase knee
+  - at: { shot: 10, round: 0 }
+    set_noise_scale: 100.0  # 1e-2 — past threshold: logical errors tick up
+  - at: { shot: 12, round: 0 }
+    set_noise_scale: 1.0    # back to the paper baseline — machine recovers

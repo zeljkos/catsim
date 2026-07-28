@@ -16,10 +16,15 @@ import numpy.typing as npt
 
 @dataclass(frozen=True)
 class DecodeResult:
-    """One decode: what the decoder concluded and how long it really took."""
+    """One decode: what the decoder concluded and how long it really took.
+
+    ``matched_detectors`` holds one detector set per blamed error mechanism:
+    matching decoders emit pairs (-1 = boundary), BP+OSD emits the full
+    detector set of each error mechanism it turned on.
+    """
 
     predicted_flips: tuple[int, ...]
-    matched_detectors: tuple[tuple[int, int], ...]
+    matched_detectors: tuple[tuple[int, ...], ...]
     latency_s: float
 
 

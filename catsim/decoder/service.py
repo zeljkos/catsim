@@ -22,6 +22,7 @@ from catsim.bus import (
     EventSink,
     LogicalError,
     RunFinished,
+    SetDecoder,
     ShotFinished,
     SyndromeFired,
     ZmqSubscriber,
@@ -59,6 +60,7 @@ class DecoderService:
         self._source = source
         self.slowdown_factor = slowdown_factor
         self._decoder: Decoder | None = None
+        self._dem: str | None = None
         self._syndrome: npt.NDArray[np.uint8] = np.zeros(0, dtype=np.uint8)
         self._prediction: tuple[int, ...] = ()
         self._edge_qubits: dict[frozenset[int], tuple[int, ...]] = {}
@@ -68,6 +70,8 @@ class DecoderService:
         """Process one bus event; returns False once the run is over."""
         if isinstance(event, BlockConfigured):
             self._configure(event)
+        elif isinstance(event, SetDecoder) and event.target in (self._source, "*"):
+            self._swap_decoder(event.name)
         elif isinstance(event, SyndromeFired) and self._decoder is not None:
             self._decode_round(event)
         elif isinstance(event, ShotFinished) and self._decoder is not None:
@@ -105,22 +109,41 @@ class DecoderService:
         if key == self._configured_key:
             return
         self._configured_key = key
-        dem = query(event.query_address, "dem")
-        self._decoder = get_decoder(
-            self._decoder_name, dem=dem, slowdown_factor=self.slowdown_factor
-        )
+        self._dem = query(event.query_address, "dem")
+        self._decoder = self._build_decoder(self._decoder_name)
         layout = json.loads(query(event.query_address, "layout"))
         self._edge_qubits = {
             frozenset(edge["detectors"]): tuple(edge["qubits"]) for edge in layout["edges"]
         }
-        self._syndrome = np.zeros(stim.DetectorErrorModel(dem).num_detectors, dtype=np.uint8)
+        self._syndrome = np.zeros(stim.DetectorErrorModel(self._dem).num_detectors, dtype=np.uint8)
         self._prediction = ()
 
-    def _identify(self, matched: tuple[tuple[int, int], ...]) -> list[int]:
-        """Name the data qubits blamed by the matched edges (-1 = boundary)."""
+    def _build_decoder(self, name: str) -> Decoder:
+        """Instantiate the named decoder against the current block's DEM."""
+        assert self._dem is not None
+        return get_decoder(name, dem=self._dem, slowdown_factor=self.slowdown_factor)
+
+    def _swap_decoder(self, name: str) -> None:
+        """Runtime decoder swap; a failed build keeps the current decoder.
+
+        A build can fail legitimately — e.g. pymatching rejects a qLDPC DEM
+        whose hyperedges cannot decompose into a matching graph.
+        """
+        if self._dem is None:
+            self._decoder_name = name
+            return
+        try:
+            self._decoder = self._build_decoder(name)
+        except (KeyError, ValueError) as exc:
+            print(f"decoder swap to {name!r} failed, keeping {self._decoder_name!r}: {exc}")
+            return
+        self._decoder_name = name
+
+    def _identify(self, matched: tuple[tuple[int, ...], ...]) -> list[int]:
+        """Name the data qubits blamed by the decoder's detector sets (-1 = boundary)."""
         blamed: set[int] = set()
-        for a, b in matched:
-            key = frozenset({a} if b == -1 else {a, b})
+        for dets in matched:
+            key = frozenset(d for d in dets if d >= 0)
             blamed.update(self._edge_qubits.get(key, ()))
         return sorted(blamed)
 
@@ -139,7 +162,7 @@ class DecoderService:
                 round=event.round,
                 latency_s=result.latency_s,
                 identified_qubits=identified,
-                matched_detectors=list(result.matched_detectors),
+                matched_detectors=[list(d) for d in result.matched_detectors],
             )
         )
         self._sink.publish(

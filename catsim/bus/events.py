@@ -10,8 +10,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-SCHEMA_VERSION = 2
-"""v2: block_configured carries a query address instead of the inline DEM;
+SCHEMA_VERSION = 3
+"""v3: decode_finished.matched_detectors generalizes from matched pairs to
+detector sets (BP+OSD blames hyperedges, matching blames edges); set_decoder
+command added for runtime decoder swap.
+v2: block_configured carries a query address instead of the inline DEM;
 command events and round_started added; correction_applied names qubits."""
 
 
@@ -84,7 +87,8 @@ class DecodeFinished(Event):
 
     ``identified_qubits`` are the data qubits the decoder holds responsible
     (via the block's served detector-to-qubit geometry); ``matched_detectors``
-    are the matched detector pairs (-1 = boundary).
+    holds one detector set per blamed error mechanism — pairs with -1 for the
+    boundary from matching decoders, arbitrary-size sets from BP+OSD.
     """
 
     type: Literal["decode_finished"] = "decode_finished"
@@ -92,7 +96,7 @@ class DecodeFinished(Event):
     round: int
     latency_s: float
     identified_qubits: list[int]
-    matched_detectors: list[tuple[int, int]]
+    matched_detectors: list[list[int]]
 
 
 class CorrectionApplied(Event):
@@ -187,6 +191,13 @@ class SetPaused(Command):
     paused: bool
 
 
+class SetDecoder(Command):
+    """Swap the target decoder service's implementation at runtime by name."""
+
+    type: Literal["set_decoder"] = "set_decoder"
+    name: str
+
+
 AnyEvent = Annotated[
     (
         BlockConfigured
@@ -206,6 +217,7 @@ AnyEvent = Annotated[
         | SetNoiseScale
         | SetPace
         | SetPaused
+        | SetDecoder
     ),
     Field(discriminator="type"),
 ]

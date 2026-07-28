@@ -12,6 +12,7 @@ from catsim.bus import (
     LogicalError,
     QueryServer,
     RunFinished,
+    SetDecoder,
     ShotFinished,
     SyndromeFired,
 )
@@ -85,3 +86,32 @@ def test_run_finished_stops_the_service(list_sink: ListSink, configured: BlockCo
     service = DecoderService(list_sink)
     assert service.handle(configured) is True
     assert service.handle(RunFinished(source="b0", shots=1)) is False
+
+
+def test_set_decoder_swaps_at_runtime(list_sink: ListSink, configured: BlockConfigured) -> None:
+    service = DecoderService(list_sink, decoder_name="pymatching")
+    service.handle(configured)
+    service.handle(SetDecoder(source="dash", target="*", name="bposd"))
+    service.handle(SyndromeFired(source="b0", shot=0, round=1, check_ids=[0]))
+    finished = [e for e in list_sink.events if isinstance(e, DecodeFinished)]
+    assert finished, "the swapped-in decoder must keep decoding"
+
+
+def test_set_decoder_unknown_name_keeps_current(
+    list_sink: ListSink, configured: BlockConfigured
+) -> None:
+    service = DecoderService(list_sink)
+    service.handle(configured)
+    service.handle(SetDecoder(source="dash", target="*", name="nope"))
+    service.handle(SyndromeFired(source="b0", shot=0, round=1, check_ids=[0]))
+    assert [e for e in list_sink.events if isinstance(e, DecodeFinished)]
+
+
+def test_set_decoder_for_other_target_ignored(
+    list_sink: ListSink, configured: BlockConfigured
+) -> None:
+    service = DecoderService(list_sink, decoder_name="pymatching")
+    service.handle(configured)
+    service.handle(SetDecoder(source="dash", target="someone-else", name="bposd"))
+    service.handle(SyndromeFired(source="b0", shot=0, round=1, check_ids=[0]))
+    assert [e for e in list_sink.events if isinstance(e, DecodeFinished)]

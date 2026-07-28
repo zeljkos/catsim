@@ -11,7 +11,7 @@ import asyncio
 import contextlib
 import json
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +33,8 @@ def create_app(
     *,
     frontend_address: str,
     backend_address: str,
+    decoders: Sequence[str] = (),
+    active_decoder: str | None = None,
 ) -> FastAPI:
     """Build the dashboard app against a running bus.
 
@@ -40,6 +42,10 @@ def create_app(
         config: Frozen dashboard configuration (from YAML).
         frontend_address: Bus address commands are published to.
         backend_address: Bus address events are subscribed from.
+        decoders: Decoder names offered by the runtime-swap control — passed
+            in as data by the caller (the dashboard renders, never imports,
+            the decoder layer).
+        active_decoder: The decoder the backend started with (preselected).
 
     Returns:
         The FastAPI application.
@@ -70,7 +76,11 @@ def create_app(
     @app.get("/api/config")
     async def api_config() -> dict[str, Any]:
         """The YAML-driven knobs the frontend renders itself from."""
-        return dict(json.loads(config.model_dump_json()))
+        return {
+            **json.loads(config.model_dump_json()),
+            "decoders": list(decoders),
+            "active_decoder": active_decoder,
+        }
 
     @app.get("/api/layout")
     async def api_layout() -> dict[str, Any]:

@@ -22,6 +22,7 @@ dependencies = [
     "pydantic",
     "pyyaml",
     "numpy",
+    "scipy",  # sparse check matrices for the BP+OSD decoder
     "matplotlib",
 ]
 
@@ -78,7 +79,7 @@ files = ["catsim", "tests"]
 
 [[tool.mypy.overrides]]
 # Untyped scientific deps: treat as Any at the boundary; our wrappers stay strict.
-module = ["stim.*", "pymatching.*", "sinter.*", "ldpc.*"]
+module = ["stim.*", "pymatching.*", "sinter.*", "ldpc.*", "scipy.*"]
 ignore_missing_imports = true
 
 # -------------------------------------------------------------- pytest ----
