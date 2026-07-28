@@ -1,0 +1,176 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "catsim"
+version = "0.1.0"
+description = "Classical simulator of the walking cat architecture (arXiv:2604.19481) with a live, configurable dashboard."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+dependencies = [
+    "stim",
+    "sinter",
+    "pymatching",
+    "ldpc",
+    "simpy",
+    "pyzmq",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "pyyaml",
+    "numpy",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+    "import-linter",
+    "pre-commit",
+    "types-PyYAML",
+]
+
+[project.scripts]
+catsim = "catsim.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["catsim"]
+
+# ---------------------------------------------------------------- ruff ----
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplify
+    "D",   # pydocstyle — charter: docstring on every public class/function
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests document intent in their names; per-test docstrings stay optional.
+"tests/**" = ["D103"]
+
+# ---------------------------------------------------------------- mypy ----
+
+[tool.mypy]
+# numpy 2.x stubs use `type` statements (PEP 695), which mypy rejects below 3.12.
+python_version = "3.12"
+strict = true
+files = ["catsim", "tests"]
+
+[[tool.mypy.overrides]]
+# Untyped scientific deps: treat as Any at the boundary; our wrappers stay strict.
+module = ["stim.*", "pymatching.*", "sinter.*", "ldpc.*"]
+ignore_missing_imports = true
+
+# -------------------------------------------------------------- pytest ----
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+# ------------------------------------------------------- import-linter ----
+# CLAUDE.md dependency graph — imports flow only downward:
+#
+#   dashboard  →  bus, machine
+#   machine    →  bus, decoder, component
+#   decoder    →  bus, codes
+#   component  →  bus, codes
+#   codes      →  (leaf)
+#   bus        →  (leaf)
+#
+# One "forbidden" contract per package makes the allowed edges exact
+# (a plain layers contract would let dashboard reach codes/decoder, etc.).
+
+[tool.importlinter]
+root_package = "catsim"
+
+[[tool.importlinter.contracts]]
+name = "bus is a leaf (imports nothing internal)"
+type = "forbidden"
+source_modules = ["catsim.bus"]
+forbidden_modules = [
+    "catsim.codes",
+    "catsim.component",
+    "catsim.decoder",
+    "catsim.machine",
+    "catsim.dashboard",
+    "catsim.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "codes is a leaf (imports nothing internal)"
+type = "forbidden"
+source_modules = ["catsim.codes"]
+forbidden_modules = [
+    "catsim.bus",
+    "catsim.component",
+    "catsim.decoder",
+    "catsim.machine",
+    "catsim.dashboard",
+    "catsim.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "component imports only bus and codes"
+type = "forbidden"
+source_modules = ["catsim.component"]
+forbidden_modules = [
+    "catsim.decoder",
+    "catsim.machine",
+    "catsim.dashboard",
+    "catsim.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "decoder imports only bus and codes"
+type = "forbidden"
+source_modules = ["catsim.decoder"]
+forbidden_modules = [
+    "catsim.component",
+    "catsim.machine",
+    "catsim.dashboard",
+    "catsim.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "machine imports only bus, decoder, component"
+type = "forbidden"
+source_modules = ["catsim.machine"]
+forbidden_modules = [
+    "catsim.codes",
+    "catsim.dashboard",
+    "catsim.cli",
+]
+# Reaching codes *through* component/decoder is the layering working as designed;
+# only a direct import would violate the charter graph.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "dashboard imports only bus and machine"
+type = "forbidden"
+source_modules = ["catsim.dashboard"]
+forbidden_modules = [
+    "catsim.codes",
+    "catsim.component",
+    "catsim.decoder",
+    "catsim.cli",
+]
+# Same as machine: only direct imports violate the graph.
+allow_indirect_imports = true

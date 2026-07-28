@@ -1,0 +1,7 @@
+# 10x better than paper baseline across all channels.
+name: optimistic
+two_qubit_gate_error: 1.0e-5
+single_qubit_gate_error: 1.0e-6
+measurement_error: 1.0e-5
+reset_error: 1.0e-5
+ion_loss_probability: 1.0e-8
