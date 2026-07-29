@@ -34,6 +34,37 @@ class PanelsConfig(BaseModel):
     injection_console: bool = True
     replay: bool = True
     factories: bool = True
+    decoder: bool = True
+
+
+class DecoderPanelConfig(BaseModel):
+    """The decoder race panel: budget line, rolling window, amber/red thresholds."""
+
+    model_config = ConfigDict(frozen=True)
+
+    budget_ms: float = Field(default=6.0, gt=0.0)
+    window: int = Field(default=200, ge=10)
+    amber_latency_fraction: float = Field(default=0.8, gt=0.0)
+    red_queue_depth: int = Field(default=5, ge=1)
+
+
+class SlowdownSliderConfig(BaseModel):
+    """Range of the live decoder-slowdown slider (latency multiplier)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    min: float = Field(default=1.0, ge=1.0)
+    max: float = Field(default=20000.0, gt=1.0)
+
+
+class DemoModeConfig(BaseModel):
+    """What the one-click demo-mode toggle sets: quiet, slow, filtered."""
+
+    model_config = ConfigDict(frozen=True)
+
+    noise_scale: float = Field(default=0.1, gt=0.0)
+    pace_ms: float = Field(default=1000.0, ge=0.0)
+    log_filter: list[str] = ["error_injected", "decode_finished", "logical_error"]
 
 
 class DashboardConfig(BaseModel):
@@ -47,6 +78,9 @@ class DashboardConfig(BaseModel):
     pace_presets_ms: list[float] = [0, 6, 100, 500, 1000]
     default_pace_ms: float = 500
     noise_scale: NoiseSliderConfig = NoiseSliderConfig()
+    decoder_slowdown: SlowdownSliderConfig = SlowdownSliderConfig()
+    decoder_panel: DecoderPanelConfig = DecoderPanelConfig()
+    demo_mode: DemoModeConfig = DemoModeConfig()
     panels: PanelsConfig = PanelsConfig()
     machine_accent: str = "#E8701A"
     workload_accent: str = "#3B82F6"

@@ -3,6 +3,7 @@
 // Renders events and posts commands — zero physics by charter.
 
 import { createBlockView } from "/static/blockview.js";
+import { createDecoderPanel } from "/static/decoder.js";
 import { createFactoriesPanel } from "/static/factories.js";
 
 const $ = (id) => document.getElementById(id);
@@ -11,6 +12,7 @@ const factoriesPanel = createFactoriesPanel(
   () => $("factory-tiles"),
   () => $("factories-empty"),
 );
+let decoderPanel = null; // built in main() — needs the YAML thresholds
 
 let cfg = null;
 let layout = null;
@@ -88,9 +90,13 @@ async function onEvent(ev) {
       const f = frameAt(ev.shot, ev.round);
       f.identified = ev.identified_qubits;
       counters.latencyMs = ev.latency_s * 1000;
+      decoderPanel?.onEvent(ev);
       renderLive();
       break;
     }
+    case "decode_queue":
+      decoderPanel?.onEvent(ev);
+      break;
     case "correction_applied":
       frameAt(ev.shot, ev.round).corrected = ev.qubits;
       renderLive();
@@ -134,6 +140,12 @@ function updateCounters() {
 }
 
 // --- event log ---------------------------------------------------------------
+function rowHidden(type, filter) {
+  if (filter === "all") return false;
+  if (filter === "demo") return !cfg.demo_mode.log_filter.includes(type);
+  return type !== filter;
+}
+
 function logEvent(ev) {
   const filter = $("log-filter").value;
   const body = $("log-body");
@@ -146,7 +158,7 @@ function logEvent(ev) {
   row.innerHTML =
     `<td>${ev.type}</td><td>${ev.source}</td>` +
     `<td>${ev.shot ?? ""}</td><td>${ev.round ?? ""}</td><td>${escapeHtml(detail)}</td>`;
-  if (filter !== "all" && ev.type !== filter) row.classList.add("hidden");
+  if (rowHidden(ev.type, filter)) row.classList.add("hidden");
   body.prepend(row);
   while (body.children.length > cfg.event_log_limit) body.removeChild(body.lastChild);
 }
@@ -155,12 +167,14 @@ function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-$("log-filter").addEventListener("change", () => {
-  const filter = $("log-filter").value;
+function applyLogFilter(value) {
+  $("log-filter").value = value;
   for (const row of $("log-body").children) {
-    row.classList.toggle("hidden", filter !== "all" && row.dataset.type !== filter);
+    row.classList.toggle("hidden", rowHidden(row.dataset.type, value));
   }
-});
+}
+
+$("log-filter").addEventListener("change", () => applyLogFilter($("log-filter").value));
 
 // --- commands ----------------------------------------------------------------
 async function sendCommand(command) {
@@ -217,12 +231,43 @@ function wireConsole() {
     // target "*": the decoder service id is not the block id
     sendCommand({ type: "set_decoder", name: decoderSelect.value, target: "*" }));
 
+  const slowdown = $("slowdown-slider");
+  slowdown.min = Math.log10(cfg.decoder_slowdown.min);
+  slowdown.max = Math.log10(cfg.decoder_slowdown.max);
+  slowdown.step = 0.01;
+  slowdown.value = 0;
+  slowdown.addEventListener("input", () => {
+    $("slowdown-value").textContent = `${Math.pow(10, slowdown.value).toFixed(0)}× (pending)`;
+  });
+  slowdown.addEventListener("change", () => {
+    const factor = Math.pow(10, slowdown.value);
+    $("slowdown-value").textContent = `${factor.toFixed(0)}×`;
+    // target "*": the decoder service id is not the block id
+    sendCommand({ type: "set_decoder_slowdown", factor, target: "*" });
+  });
+
   let paused = false;
   $("pause-btn").addEventListener("click", () => {
     paused = !paused;
     $("pause-btn").textContent = paused ? "▶ resume" : "⏸ pause";
     $("pause-btn").classList.toggle("active", paused);
     sendCommand({ type: "set_paused", paused, target: "*" });
+  });
+
+  // Demo mode, one click: minimum noise + slow pace + filtered event log.
+  // Injections stay armed while paused and fire on the first resumed round.
+  let demo = false;
+  $("demo-btn").addEventListener("click", () => {
+    demo = !demo;
+    $("demo-btn").classList.toggle("active", demo);
+    const noiseScale = demo ? cfg.demo_mode.noise_scale : 1.0;
+    const paceMs = demo ? cfg.demo_mode.pace_ms : cfg.default_pace_ms;
+    sendCommand({ type: "set_noise_scale", scale: noiseScale, target: "*" });
+    sendCommand({ type: "set_pace", tick_seconds: paceMs / 1000, target: "*" });
+    slider.value = Math.log10(noiseScale);
+    $("noise-value").textContent = `${noiseScale.toFixed(2)}× (pending)`;
+    if ([...pace.options].some((o) => Number(o.value) === paceMs)) pace.value = paceMs;
+    applyLogFilter(demo ? "demo" : "all");
   });
 
   $("scenario-run").addEventListener("click", async () => {
@@ -296,6 +341,7 @@ async function main() {
     const node = $(`panel-${panel.replaceAll("_", "-")}`);
     if (node && !on) node.classList.add("hidden");
   }
+  decoderPanel = createDecoderPanel(cfg.decoder_panel, $("panel-decoder"));
   wireConsole();
   wireReplay();
   await loadScenarios();

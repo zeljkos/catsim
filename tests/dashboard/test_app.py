@@ -17,6 +17,14 @@ def test_shipped_config_loads() -> None:
     assert 6 in config.pace_presets_ms, "the paper's real SEC must be a preset"
     assert config.machine_accent == "#E8701A"
     assert config.panels.factories is True, "M3: the factories panel ships enabled"
+    assert config.panels.decoder is True, "M4: the decoder race panel ships enabled"
+    assert config.decoder_panel.budget_ms == 6.0, "the paper's SEC budget is the line"
+    assert config.decoder_slowdown.max > 1.0
+    assert set(config.demo_mode.log_filter) == {
+        "error_injected",
+        "decode_finished",
+        "logical_error",
+    }
 
 
 @pytest.fixture

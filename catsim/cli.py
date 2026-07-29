@@ -7,6 +7,8 @@ callable (and testable) from Python without subprocesses.
 from __future__ import annotations
 
 import argparse
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from catsim import codes, component, dashboard, decoder, machine
@@ -37,6 +39,26 @@ def build_parser() -> argparse.ArgumentParser:
     curve.add_argument("--max-errors", type=int, default=200)
     curve.add_argument("--workers", type=int, default=8)
     curve.add_argument("--out-dir", type=Path, default=Path("reports"))
+
+    race = sub.add_parser(
+        "decoder-race", help="batch decode-latency percentiles vs the 6 ms SEC budget (M4)"
+    )
+    race.add_argument("--distances", type=int, nargs="+", default=[3, 5, 7])
+    race.add_argument(
+        "--scales",
+        type=float,
+        nargs="+",
+        default=[1.0, 5.0],
+        help="noise multipliers applied to the base model",
+    )
+    race.add_argument("--noise", default="paper-baseline")
+    race.add_argument("--rounds", type=int, default=2000, help="measured decodes per config")
+    race.add_argument("--warmup", type=int, default=100, help="leading decodes discarded")
+    race.add_argument(
+        "--rounds-per-shot", type=int, default=10, help="SE rounds per sampled memory shot"
+    )
+    race.add_argument("--seed", type=int, default=0)
+    race.add_argument("--out-dir", type=Path, default=Path("reports"))
 
     live = sub.add_parser("live", help="run a live memory block + decoder on the bus")
     live.add_argument("--code", choices=sorted(codes.available_codes()), default="surface")
@@ -133,6 +155,78 @@ def _write_curve_outputs(
     print(f"wrote {csv_path} and {png_path}")
 
 
+def _race_configs(distances: list[int]) -> list[tuple[str, codes.QECCode, str]]:
+    """The M4 race lineup: pymatching on surface d, BP+OSD on Q102."""
+    lineup: list[tuple[str, codes.QECCode, str]] = [
+        (f"surface d={d} · pymatching", codes.get_code("surface", distance=d), "pymatching")
+        for d in distances
+    ]
+    q102 = codes.get_code("gb")
+    lineup.append((f"{q102.name} [[102,22,9]] · BP+OSD-0", q102, "bposd"))
+    return lineup
+
+
+def _round_boundaries(segments: component.RoundSegments) -> list[int]:
+    """Cumulative detector count at the end of each live-tick segment."""
+    counts = (
+        [segments.init.num_detectors]
+        + [segments.body.num_detectors] * segments.repeats
+        + [segments.final.num_detectors]
+    )
+    boundaries: list[int] = []
+    total = 0
+    for count in counts:
+        total += count
+        boundaries.append(total)
+    return boundaries
+
+
+def _progress_printer(interval_s: float = 30.0) -> Callable[[int, int], None]:
+    """A time-throttled progress line: silent for fast configs, chatty for slow ones."""
+    last = [0.0]
+
+    def report(done: int, planned: int) -> None:
+        now = time.monotonic()
+        if now - last[0] >= interval_s:
+            last[0] = now
+            print(f"  ... {done}/{planned} decodes", flush=True)
+
+    return report
+
+
+def _cmd_decoder_race(args: argparse.Namespace) -> None:
+    """Measure per-round decode latency per config; write the plot + CSV artifact."""
+    base = component.load_noise_model(args.noise)
+    stats: list[decoder.LatencyStats] = []
+    for scale in args.scales:
+        noise = base if scale == 1.0 else base.scaled(scale)
+        for label, code, decoder_name in _race_configs(args.distances):
+            circuit = component.build_memory_circuit(code, noise, args.rounds_per_shot)
+            dem = str(component.memory_detector_error_model(circuit))
+            print(f"measuring {label} at noise {scale:g}x ...", flush=True)
+            latencies = decoder.replay_latencies(
+                dem,
+                decoder_name,
+                _round_boundaries(component.split_into_rounds(circuit)),
+                min_rounds=args.rounds,
+                warmup_rounds=args.warmup,
+                seed=args.seed,
+                progress=_progress_printer(),
+            )
+            stat = decoder.summarize_latencies(label, decoder_name, f"{scale:g}×", latencies)
+            stats.append(stat)
+            print(
+                f"{label}  noise {scale:g}x  n={stat.count}  "
+                f"p50={stat.p50_ms:.3f} ms  p95={stat.p95_ms:.3f} ms  p99={stat.p99_ms:.3f} ms",
+                flush=True,
+            )
+    csv_path = args.out_dir / "m4_decoder_race.csv"
+    png_path = args.out_dir / "m4_decoder_race.png"
+    decoder.write_latency_csv(stats, csv_path)
+    decoder.plot_latency_race(stats, png_path)
+    print(f"wrote {csv_path} and {png_path}")
+
+
 def _cmd_live(args: argparse.Namespace) -> None:
     """Run the single-block live demo and print the bus-event tallies."""
     noise = component.load_noise_model(args.noise)
@@ -192,6 +286,8 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if args.command == "batch-curve":
         _cmd_batch_curve(args)
+    elif args.command == "decoder-race":
+        _cmd_decoder_race(args)
     elif args.command == "live":
         _cmd_live(args)
     elif args.command == "serve":

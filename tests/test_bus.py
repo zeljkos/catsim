@@ -32,6 +32,7 @@ EVENTS: list[bus.AnyEvent] = [
         # matching pair, boundary edge, and a BP+OSD hyperedge in one payload
         matched_detectors=[[2, 7], [3, -1], [4, 9, 12, 30]],
     ),
+    bus.DecodeQueue(source="d0", depth=3),
     bus.CorrectionApplied(source="d0", shot=0, round=1, observables=[0], qubits=[5]),
     bus.LogicalError(source="d0", shot=0, observables=[0]),
     bus.ShotFinished(source="b0", shot=0, actual_flips=[0]),
@@ -63,6 +64,7 @@ EVENTS: list[bus.AnyEvent] = [
     bus.SetPace(source="dash", target="b0", tick_seconds=0.5),
     bus.SetPaused(source="dash", target="b0", paused=True),
     bus.SetDecoder(source="dash", target="*", name="bposd"),
+    bus.SetDecoderSlowdown(source="dash", target="*", factor=100.0),
 ]
 
 

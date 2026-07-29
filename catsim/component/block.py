@@ -19,6 +19,7 @@ from catsim.bus import (
     Command,
     ErrorInjected,
     EventSink,
+    EventSource,
     InjectLoss,
     InjectPauli,
     IonLost,
@@ -33,7 +34,6 @@ from catsim.bus import (
     SetPaused,
     ShotFinished,
     SyndromeFired,
-    ZmqSubscriber,
 )
 from catsim.codes import QECCode
 from catsim.component.circuits import (
@@ -73,7 +73,7 @@ class MemoryBlockService:
         source: str = "block0",
         seed: int = 0,
         tick_seconds: float = 0.0,
-        commands: ZmqSubscriber | None = None,
+        commands: EventSource | None = None,
     ) -> None:
         """Build the circuit and simulator for ``spec`` and start the query server.
 

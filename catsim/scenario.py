@@ -20,6 +20,7 @@ from catsim.bus import (
     InjectPauli,
     RoundStarted,
     RunFinished,
+    SetDecoderSlowdown,
     SetNoiseScale,
     SetPace,
     SetPaused,
@@ -60,6 +61,7 @@ class ScenarioStep(BaseModel):
     set_noise_scale: float | None = None
     set_pace_seconds: float | None = None
     set_paused: bool | None = None
+    set_decoder_slowdown: float | None = None
 
     @model_validator(mode="after")
     def _exactly_one_action(self) -> ScenarioStep:
@@ -70,6 +72,7 @@ class ScenarioStep(BaseModel):
             self.set_noise_scale,
             self.set_pace_seconds,
             self.set_paused,
+            self.set_decoder_slowdown,
         ]
         if sum(a is not None for a in actions) != 1:
             raise ValueError("each step must set exactly one action")
@@ -77,7 +80,7 @@ class ScenarioStep(BaseModel):
 
     def command(
         self, target: str
-    ) -> InjectPauli | InjectLoss | SetNoiseScale | SetPace | SetPaused:
+    ) -> InjectPauli | InjectLoss | SetNoiseScale | SetPace | SetPaused | SetDecoderSlowdown:
         """Build the bus command this step publishes when it fires."""
         if self.inject is not None:
             return InjectPauli(
@@ -89,8 +92,10 @@ class ScenarioStep(BaseModel):
             return SetNoiseScale(source=_SOURCE, target=target, scale=self.set_noise_scale)
         if self.set_pace_seconds is not None:
             return SetPace(source=_SOURCE, target=target, tick_seconds=self.set_pace_seconds)
-        assert self.set_paused is not None
-        return SetPaused(source=_SOURCE, target=target, paused=self.set_paused)
+        if self.set_paused is not None:
+            return SetPaused(source=_SOURCE, target=target, paused=self.set_paused)
+        assert self.set_decoder_slowdown is not None
+        return SetDecoderSlowdown(source=_SOURCE, target=target, factor=self.set_decoder_slowdown)
 
 
 class Scenario(BaseModel):

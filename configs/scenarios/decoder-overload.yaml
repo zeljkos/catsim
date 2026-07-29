@@ -1,0 +1,22 @@
+# The decoder falls behind: run at the REAL 6 ms SEC pace, raise noise so
+# most rounds carry decode work, then throttle the decoder far past the budget
+# — the queue of rounds awaiting decode climbs and corrections lag whole shots
+# behind the block; remove the throttle and the backlog drains in a blink.
+# The throttle must be huge because the baseline is embarrassingly fast: d=3
+# matching decodes in ~5 µs, ~1000x under the 6 ms budget (see m4_decoder_race).
+# target "*": pace/noise reach block AND factories, the throttle reaches the
+# decoder service (whose id differs from the block's).
+name: decoder-overload
+description: "decoder throttled past the 6 ms budget: queue grows, corrections lag; throttle removed: backlog drains"
+target: "*"
+steps:
+  - at: { shot: 0, round: 0 }
+    set_pace_seconds: 0.006 # the paper's real SEC — an honest race
+  - at: { shot: 0, round: 0 }
+    set_noise_scale: 50.0   # busy syndromes: decode work most rounds
+  - at: { shot: 20, round: 0 }
+    set_decoder_slowdown: 10000 # decode ~50 ms vs 6 ms rounds: queue climbs
+  - at: { shot: 120, round: 0 }
+    set_decoder_slowdown: 1     # throttle off: backlog drains instantly
+  - at: { shot: 160, round: 0 }
+    set_noise_scale: 1.0    # back to the paper baseline — machine recovers

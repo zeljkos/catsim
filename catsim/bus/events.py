@@ -12,8 +12,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 4
-"""v4: factory events (configured/attempt/accepted/rejected) and the loss
+SCHEMA_VERSION = 5
+"""v5: decode_queue (rounds awaiting decode at the decoder service) and the
+set_decoder_slowdown command (runtime throttle — the decoder-overload knob).
+v4: factory events (configured/attempt/accepted/rejected) and the loss
 recovery path (loss_detected, replacement_dispatched, replacement_ready);
 qubit_replaced carries the round it landed in (mid-shot replacement, M3).
 v3: decode_finished.matched_detectors generalizes from matched pairs to
@@ -102,6 +104,17 @@ class DecodeFinished(Event):
     latency_s: float
     identified_qubits: list[int]
     matched_detectors: list[list[int]]
+
+
+class DecodeQueue(Event):
+    """The decoder service's backlog changed: rounds awaiting decode right now.
+
+    Depth 0 means the decoder is keeping up; sustained growth means rounds
+    arrive faster than they are decoded (the overload story, M4).
+    """
+
+    type: Literal["decode_queue"] = "decode_queue"
+    depth: int = Field(ge=0)
 
 
 class CorrectionApplied(Event):
@@ -206,3 +219,10 @@ class SetDecoder(Command):
 
     type: Literal["set_decoder"] = "set_decoder"
     name: str
+
+
+class SetDecoderSlowdown(Command):
+    """Throttle the target decoder by an artificial latency multiplier (1 = none)."""
+
+    type: Literal["set_decoder_slowdown"] = "set_decoder_slowdown"
+    factor: float = Field(ge=1.0)

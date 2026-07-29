@@ -3,6 +3,7 @@
 import stim
 
 from catsim.bus import (
+    AnyEvent,
     BlockConfigured,
     ErrorInjected,
     InjectLoss,
@@ -13,6 +14,7 @@ from catsim.bus import (
     RunFinished,
     SetNoiseScale,
     SetPace,
+    SetPaused,
     ShotFinished,
     SyndromeFired,
     query,
@@ -153,6 +155,43 @@ def test_noise_scale_rebuilds_at_shot_boundary(
     assert configured[1].noise_name.endswith("-x10")
     first_round = next(e for e in list_sink.events if isinstance(e, RoundStarted))
     assert list_sink.events.index(configured[1]) < list_sink.events.index(first_round)
+
+
+class _ScriptedCommands:
+    """Command feed handing out one scripted entry per poll (None = bus quiet)."""
+
+    def __init__(self, script: list[AnyEvent | None]) -> None:
+        self._script = script
+
+    def receive(self, timeout_s: float = 0.05) -> AnyEvent | None:
+        return self._script.pop(0) if self._script else None
+
+
+def test_injection_armed_while_paused_fires_on_first_resumed_round(
+    list_sink: ListSink, paper_noise: DepolarizingNoise
+) -> None:
+    """Demo-rehearsal guarantee: pause, arm an injection, resume — it lands at once."""
+    noiseless = paper_noise.scaled(0.0)
+    spec = MemoryBlockSpec(code=get_code("surface", distance=3), noise=noiseless, rounds=4)
+    commands = _ScriptedCommands(
+        [
+            SetPaused(source="test", target="block0", paused=True),
+            None,  # pause engages; the block is now waiting
+            InjectPauli(source="test", target="block0", qubits=[10], pauli="X"),
+            None,  # armed while paused, not yet fired
+            SetPaused(source="test", target="block0", paused=False),
+        ]
+    )
+    service = MemoryBlockService(spec, list_sink, seed=0, commands=commands)
+    try:
+        service.run(1)
+    finally:
+        service.close()
+    injected = [e for e in list_sink.events if isinstance(e, ErrorInjected)]
+    assert len(injected) == 1
+    assert injected[0].round == 1, "must fire on the first injectable round after resume"
+    syndromes = [e for e in list_sink.events if isinstance(e, SyndromeFired)]
+    assert syndromes and syndromes[0].round == injected[0].round
 
 
 def test_set_pace_takes_effect(list_sink: ListSink, paper_noise: DepolarizingNoise) -> None:

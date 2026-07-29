@@ -14,7 +14,9 @@ from catsim.bus import (
     QubitReplaced,
     ReplacementDispatched,
     RoundStarted,
+    SetDecoderSlowdown,
     SetNoiseScale,
+    SetPace,
     SyndromeFired,
 )
 from catsim.codes import get_code
@@ -29,7 +31,13 @@ SCENARIO_DIR = REPO_ROOT / "configs" / "scenarios"
 def test_shipped_scenarios_load() -> None:
     scenarios = list_scenarios(SCENARIO_DIR)
     names = [s.name for s in scenarios]
-    assert {"single-decoherence", "beyond-distance", "ion-loss", "factory-yield"} <= set(names)
+    assert {
+        "single-decoherence",
+        "beyond-distance",
+        "ion-loss",
+        "factory-yield",
+        "decoder-overload",
+    } <= set(names)
     assert all(s.description for s in scenarios)
 
 
@@ -161,6 +169,25 @@ def test_ion_loss_recovers_end_to_end(paper_noise: object) -> None:
     assert not [e for e in events if isinstance(e, LogicalError)], (
         "loss recovery within the code distance must not cost a logical qubit"
     )
+
+
+def test_decoder_overload_throttles_then_recovers(list_sink: ListSink) -> None:
+    """M4: the overload script broadcasts a past-budget throttle, then removes it."""
+    scenario = load_scenario("decoder-overload", SCENARIO_DIR)
+    assert scenario.target == "*", "the throttle must reach the decoder service"
+    runner = ScenarioRunner(scenario, list_sink)
+    runner.handle(RoundStarted(source="block0", shot=0, round=0))
+    assert {type(e) for e in list_sink.events} == {SetPace, SetNoiseScale}
+    runner.handle(RoundStarted(source="block0", shot=20, round=0))
+    throttle = list_sink.events[-1]
+    assert isinstance(throttle, SetDecoderSlowdown)
+    assert throttle.factor > 1.0, "the throttle must push decode past the budget"
+    runner.handle(RoundStarted(source="block0", shot=120, round=0))
+    recovery = list_sink.events[-1]
+    assert isinstance(recovery, SetDecoderSlowdown)
+    assert recovery.factor == 1.0, "removing the throttle is the recovery beat"
+    runner.handle(RoundStarted(source="block0", shot=160, round=0))
+    assert runner.done
 
 
 def test_factory_yield_broadcasts_noise_steps(list_sink: ListSink) -> None:

@@ -17,6 +17,7 @@ def test_parser_knows_all_commands() -> None:
     parser = build_parser()
     assert parser.parse_args(["live"]).command == "live"
     assert parser.parse_args(["batch-curve"]).command == "batch-curve"
+    assert parser.parse_args(["decoder-race"]).command == "decoder-race"
     assert parser.parse_args(["serve"]).command == "serve"
 
 
@@ -64,3 +65,30 @@ def test_batch_curve_writes_reports(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert (tmp_path / "m0_logical_error_vs_distance.csv").exists()
     assert (tmp_path / "m0_logical_error_vs_distance.png").exists()
     assert "wrote" in capsys.readouterr().out
+
+
+def test_decoder_race_writes_reports(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(
+        [
+            "decoder-race",
+            "--distances",
+            "3",
+            "--scales",
+            "1",
+            "--rounds",
+            "20",
+            "--warmup",
+            "2",
+            "--rounds-per-shot",
+            "3",
+            "--noise",
+            str(NOISE_DIR / "paper-baseline.yaml"),
+            "--out-dir",
+            str(tmp_path),
+        ]
+    )
+    assert (tmp_path / "m4_decoder_race.csv").exists()
+    assert (tmp_path / "m4_decoder_race.png").exists()
+    out = capsys.readouterr().out
+    assert "p99=" in out
+    assert "wrote" in out

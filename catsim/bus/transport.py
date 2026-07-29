@@ -29,6 +29,14 @@ class EventSink(Protocol):
         ...
 
 
+class EventSource(Protocol):
+    """Anything events can be polled from; lets tests script command feeds."""
+
+    def receive(self, timeout_s: float = 0.05) -> AnyEvent | None:
+        """Return the next event, or None if nothing arrives within the timeout."""
+        ...
+
+
 class ZmqPublisher:
     """PUB socket connected to the bus proxy; the process's handle for emitting."""
 

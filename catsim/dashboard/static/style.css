@@ -130,6 +130,21 @@ button.active { border-color: var(--machine); color: var(--machine); }
 .control.scenario { flex-direction: row; align-items: end; gap: 0.5rem; }
 .control.scenario label { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; }
 
+/* ---- decoder race ---- */
+#panel-decoder { margin: 0 1.2rem 1rem; transition: border-color 0.3s; }
+#panel-decoder.amber { border-color: var(--fired); }
+#panel-decoder.red { border-color: var(--err); }
+.decoder-body { display: flex; gap: 1.4rem; align-items: stretch; }
+.decoder-body .tile-stats { margin-bottom: 0; align-items: center; }
+.d-chart { flex: 1; min-height: 5.2rem; display: block; }
+.d-chart rect.under { fill: var(--workload); opacity: 0.85; }
+.d-chart rect.over { fill: var(--err); }
+.d-chart line.budget { stroke: var(--err); stroke-width: 0.4; stroke-dasharray: 1.6 1; }
+.d-chart .budget-label { fill: var(--err); font-size: 2.6px; }
+.d-badge { margin-left: auto; font-size: 0.72rem; padding: 0.1rem 0.55rem; border-radius: 999px; border: 1px solid var(--corrected); color: var(--corrected); }
+.d-badge.amber { border-color: var(--fired); color: var(--fired); }
+.d-badge.red { border-color: var(--err); color: var(--err); }
+
 /* ---- factories ---- */
 #panel-factories { margin: 0 1.2rem 1rem; }
 .tiles { display: flex; gap: 0.8rem; flex-wrap: wrap; }

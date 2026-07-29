@@ -14,6 +14,7 @@ from catsim.bus.events import (
     BlockConfigured,
     CorrectionApplied,
     DecodeFinished,
+    DecodeQueue,
     DecodeStarted,
     ErrorInjected,
     InjectLoss,
@@ -24,6 +25,7 @@ from catsim.bus.events import (
     RoundStarted,
     RunFinished,
     SetDecoder,
+    SetDecoderSlowdown,
     SetNoiseScale,
     SetPace,
     SetPaused,
@@ -48,6 +50,7 @@ AnyEvent = Annotated[
         | SyndromeFired
         | DecodeStarted
         | DecodeFinished
+        | DecodeQueue
         | CorrectionApplied
         | LogicalError
         | ShotFinished
@@ -67,6 +70,7 @@ AnyEvent = Annotated[
         | SetPace
         | SetPaused
         | SetDecoder
+        | SetDecoderSlowdown
     ),
     Field(discriminator="type"),
 ]

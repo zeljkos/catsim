@@ -22,12 +22,37 @@ noise_scale:
   max: 100.0
   default: 1.0
 
+# Live decoder-slowdown slider: artificial latency multiplier on the decoder
+# service (1 = no throttle) — the "decoder falls behind" knob. The range is
+# huge because the baseline is µs-fast: pushing a ~5 µs decode past the 6 ms
+# budget takes a >1000x throttle.
+decoder_slowdown:
+  min: 1.0
+  max: 20000.0
+
+# Decoder race panel: rolling p50/p99 vs the SEC budget, queue depth.
+# Amber when rolling p99 reaches amber_latency_fraction x budget; red when the
+# queue of rounds awaiting decode reaches red_queue_depth.
+decoder_panel:
+  budget_ms: 6.0
+  window: 200
+  amber_latency_fraction: 0.8
+  red_queue_depth: 5
+
+# One-click demo mode: minimum noise, slow pace, and an event log filtered to
+# the cause-and-effect chain only.
+demo_mode:
+  noise_scale: 0.1
+  pace_ms: 1000
+  log_filter: [error_injected, decode_finished, logical_error]
+
 panels:
   block_view: true
   event_log: true
   injection_console: true
   replay: true
   factories: true
+  decoder: true
 
 # Scale-control presets (optional display sugar, arrives with the machine view).
 # The primary control is always the free numeric "build machine of N chips" / "+N chips"
