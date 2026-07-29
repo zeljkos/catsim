@@ -8,11 +8,14 @@ from catsim.machine.backend import MachineBackend
 from catsim.machine.calibration import Calibration
 from catsim.machine.chip import ChipRuntime
 from catsim.machine.config import (
+    InterconnectConfig,
     MachineConfig,
     available_machines,
     load_machine_config,
 )
 from catsim.machine.fleet import FleetBackend
+from catsim.machine.interconnect import InterconnectModel
+from catsim.machine.ledger import FleetLedger
 from catsim.machine.live import LiveBackend
 from catsim.machine.model import MachineModel, MachineSnapshot
 from catsim.machine.node import (
@@ -35,10 +38,21 @@ from catsim.machine.report import (
     collect_predicted_vs_measured,
     write_pvm_csv,
 )
-from catsim.machine.roles import desired_factories, next_role
+from catsim.machine.roles import desired_factories, module_name, next_role, split_demand
 from catsim.machine.runner import DemoReport, run_memory_demo
 from catsim.machine.scheduler import SchedulerService
 from catsim.machine.service import MachineService
+from catsim.machine.sweep import (
+    InterconnectPoint,
+    ScalingPoint,
+    measure_point,
+    plan_fleet,
+    predict_point,
+    sweep_interconnect,
+    write_interconnect_csv,
+    write_scaling_csv,
+)
+from catsim.machine.sweep_plot import plot_scaling
 
 __all__ = [
     "DEFAULT_BACKEND",
@@ -49,6 +63,10 @@ __all__ = [
     "DemoReport",
     "DockerSpawner",
     "FleetBackend",
+    "FleetLedger",
+    "InterconnectConfig",
+    "InterconnectModel",
+    "InterconnectPoint",
     "LiveBackend",
     "MachineBackend",
     "MachineConfig",
@@ -59,18 +77,28 @@ __all__ = [
     "PredictedVsMeasured",
     "ProcessSpawner",
     "ProvisionerService",
+    "ScalingPoint",
     "SchedulerService",
     "Spawner",
     "available_machines",
     "collect_predicted_vs_measured",
     "desired_factories",
     "load_machine_config",
+    "measure_point",
+    "module_name",
     "next_role",
+    "plan_fleet",
+    "plot_scaling",
     "predict_machine",
+    "predict_point",
+    "split_demand",
+    "sweep_interconnect",
+    "write_interconnect_csv",
     "price_chip",
     "run_chip",
     "run_memory_demo",
     "run_provisioner",
     "run_scheduler",
     "write_pvm_csv",
+    "write_scaling_csv",
 ]

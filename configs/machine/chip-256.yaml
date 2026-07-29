@@ -26,5 +26,29 @@ assumptions:
 # Reference workload demand: ~12 T/s tracks the paper's ~1M T gates/day
 # throughput reference. With no magic factory the T queue visibly stalls —
 # honest at N=1; factory chips arrive with scale (M6).
+# cross_module_fraction is an ASSUMPTION (M7): the paper's single-machine
+# workloads say nothing about inter-module locality; NUMA-style mostly-local
+# traffic is assumed. Applies only once a second module is populated.
 workload:
   t_per_second: 12.0
+  cross_module_fraction: 0.25
+
+# Module grouping (M7): the scheduler fills a module to capacity, then opens
+# the next. ~40 chips = one 2027-scale machine per module.
+module:
+  capacity_chips: 40
+
+# Inter-module photonic interconnect — ALL VALUES ARE ASSUMPTIONS, NOT FROM
+# THE PAPER (arXiv:2604.19481 is a single-machine blueprint; its "photonic"
+# references are laser delivery, not interconnects). Sourced from IonQ's
+# public roadmap (2028: photonic interconnect) and field literature:
+#   pair_rate_hz: ASSUMPTION — demonstrated ion-photon heralded-entanglement
+#     rates in the literature are order 10^2 pairs/s, vs the intra-module
+#     transport-based Bell factories.
+#   latency_s: ASSUMPTION — heralding round-trip, orders slower than the
+#     intra-module transport link.
+#   bank_capacity: ASSUMPTION — cross-module pairs banked ahead of demand.
+interconnect:
+  pair_rate_hz: 100.0
+  latency_s: 0.01
+  bank_capacity: 60

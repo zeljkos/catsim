@@ -104,6 +104,18 @@ EVENTS: list[bus.AnyEvent] = [
         measured_logical_errors=1,
         logical_error_per_logical_per_shot=1 / 72,
     ),
+    bus.InterconnectStatus(
+        source="scheduler",
+        modules=2,
+        severed=True,
+        bank=17,
+        bank_capacity=60,
+        pair_rate_hz=100.0,
+        latency_s=0.01,
+        cross_demand_per_second=3.0,
+        cross_t_served=1200,
+        cross_queue_depth=42,
+    ),
     bus.ChipAnnounce(source="inst-a1b2", nominal_qubits=256, modes=["behavioral", "live"]),
     bus.ChipAdmitted(
         source="scheduler",
@@ -121,6 +133,7 @@ EVENTS: list[bus.AnyEvent] = [
         chip_id="chip17",
         role="factory",
         mode="behavioral",
+        module="B",
         blocks=[],
         magic_factories=["ch2"],
         t_demand_per_second=12.0,
@@ -134,6 +147,8 @@ EVENTS: list[bus.AnyEvent] = [
     bus.StopChip(source="provisioner", target="chip3"),
     bus.SetChipMode(source="scheduler", target="chip3", mode="live"),
     bus.SetFocus(source="dash", target="scheduler", chip_id="chip3"),
+    bus.AddModule(source="dash", target="scheduler"),
+    bus.SetInterconnect(source="dash", target="scheduler", severed=True),
     bus.InjectPauli(source="dash", target="b0", qubits=[4], pauli="X"),
     bus.InjectLoss(source="dash", target="b0", qubits=[4]),
     bus.SetNoiseScale(source="dash", target="b0", scale=10.0),
@@ -168,6 +183,7 @@ def test_commands_are_commands() -> None:
         "scale_up",
         "drain",
         "stop_chip",
+        "add_module",
     )
     for event in EVENTS:
         assert isinstance(event, bus.Command) == event.type.startswith(command_types)

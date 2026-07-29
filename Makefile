@@ -3,7 +3,11 @@ VENV_BIN := $(if $(wildcard .venv/bin),.venv/bin/,)
 
 .PHONY: check lint typecheck imports test format setup demo demo-docker reset
 
-## demo: Act 1 ready to grow — the elastic fleet (1 chip, process fallback) + dashboard
+## demo: the full three-act arc, ready to drive from dashboard buttons —
+## Act 1: one chip (it boots live). Act 2: type 39, press "+N chips" → module A
+## fills to 40. Act 3: press "+N chips" again with 40 (or "add module" first) →
+## module B assembles over the photonic interconnect; run the
+## interconnect-outage scenario as the closing beat.
 demo:
 	$(VENV_BIN)python -m catsim.cli serve --fleet 1 --machine chip-256
 

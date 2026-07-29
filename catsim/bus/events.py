@@ -13,8 +13,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 7
-"""v7: elastic-runtime slice (fleet_events.py) — join/leave protocol
+SCHEMA_VERSION = 8
+"""v8: two-module slice (M7) — chip_admitted/chip_configured/chip_status grow
+``module`` membership, machine_status grows ``modules``; interconnect_status
+carries the photonic Bell-pair bank (parameters ASSUMED, not from the paper);
+add_module opens the next module, set_interconnect severs/restores the link.
+v7: elastic-runtime slice (fleet_events.py) — join/leave protocol
 (chip_announce/chip_admitted/chip_heartbeat/chip_lost/chip_left), the
 provisioner's two operations (scale_up, drain), stop_chip, and the fidelity
 dial (set_chip_mode, set_focus); chip_status grows role/mode/machine_seconds/

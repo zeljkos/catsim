@@ -42,6 +42,7 @@ from catsim.bus.factory_events import (
     ReplacementReady,
 )
 from catsim.bus.fleet_events import (
+    AddModule,
     ChipAdmitted,
     ChipAnnounce,
     ChipHeartbeat,
@@ -51,9 +52,15 @@ from catsim.bus.fleet_events import (
     ScaleUp,
     SetChipMode,
     SetFocus,
+    SetInterconnect,
     StopChip,
 )
-from catsim.bus.machine_events import ChipConfigured, ChipStatus, MachineStatus
+from catsim.bus.machine_events import (
+    ChipConfigured,
+    ChipStatus,
+    InterconnectStatus,
+    MachineStatus,
+)
 
 AnyEvent = Annotated[
     (
@@ -80,6 +87,7 @@ AnyEvent = Annotated[
         | ChipConfigured
         | ChipStatus
         | MachineStatus
+        | InterconnectStatus
         | ChipAnnounce
         | ChipHeartbeat
         | ChipLost
@@ -90,6 +98,8 @@ AnyEvent = Annotated[
         | StopChip
         | SetChipMode
         | SetFocus
+        | AddModule
+        | SetInterconnect
         | InjectPauli
         | InjectLoss
         | SetNoiseScale

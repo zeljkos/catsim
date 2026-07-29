@@ -32,6 +32,25 @@ def test_roadmap_chip_documents_divergence() -> None:
     assert "1e-7" in cfg.chip.accounting_note
 
 
+def test_two_module_machine_carries_assumed_interconnect() -> None:
+    cfg = load_machine_config("chip-256-x80-2mod", MACHINE_DIR)
+    assert cfg.chips == 80
+    assert cfg.module.capacity_chips == 40  # two modules of 40
+    assert cfg.interconnect.pair_rate_hz == 100.0  # ASSUMPTION: ~10^2 pairs/s literature
+    assert cfg.interconnect.bank_capacity == 60
+    assert cfg.workload.cross_module_fraction == 0.25
+    # The sourcing caveat must be in the shipped file, not just in docs.
+    text = (MACHINE_DIR / "chip-256-x80-2mod.yaml").read_text()
+    assert "ASSUMPTION" in text
+    assert "NOT from arXiv:2604.19481" in text
+
+
+def test_unit_chip_defaults_module_and_interconnect() -> None:
+    cfg = load_machine_config("chip-256", MACHINE_DIR)
+    assert cfg.module.capacity_chips == 40
+    assert cfg.interconnect.latency_s == 0.01  # ASSUMPTION, echoed on the bus
+
+
 def test_lean_accounting_requires_note() -> None:
     from catsim.machine.config import BlockComposition, ChipComposition
 

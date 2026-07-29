@@ -1,19 +1,22 @@
-"""The fleet scheduler: admission, roles, heartbeats, focus, machine roll-up.
+"""The fleet scheduler: admission, modules, roles, heartbeats, focus, roll-up.
 
 Exists so the machine is whatever chips are currently registered (M6): it
-answers ``chip_announce`` with an identity and a Table I-balanced role, keeps
-the fleet honest through heartbeats (missed beats → ``chip_lost`` → roles and
-T demand rebalance — scaling and failure are the same code path), moves the
-fidelity-dial focus on request, and publishes the machine roll-up whose
-prediction column is the paper's arithmetic for the *current* fleet.
+answers ``chip_announce`` with an identity, a module, and a Table I-balanced
+role, keeps the fleet honest through heartbeats (missed beats → ``chip_lost``
+→ roles and T demand rebalance — scaling and failure are the same code path),
+moves the fidelity-dial focus on request, and publishes the machine roll-up
+whose prediction column is the paper's arithmetic for the *current* fleet.
+M7: a module fills to its configured capacity and the next opens; roles and
+demand balance per module, cross-module demand rides the interconnect bank
+(all link parameters ASSUMED, not from the paper — see the ledger).
 """
 
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
 
 from catsim.bus import (
+    AddModule,
     AnyEvent,
     BlockAssignment,
     ChipAdmitted,
@@ -25,47 +28,20 @@ from catsim.bus import (
     EventSink,
     EventSource,
     LogicalError,
-    MachineStatus,
     SetChipMode,
     SetFocus,
+    SetInterconnect,
     ShotFinished,
 )
 from catsim.machine.config import MachineConfig
-from catsim.machine.prediction import predict_machine
-from catsim.machine.pricing import MEMORY_BLOCK_LOGICAL
-from catsim.machine.roles import FACTORY_CHIP, desired_factories, next_role
-
-_DAY_SECONDS = 86_400.0
+from catsim.machine.fleet_state import ChipRecord, build_machine_status
+from catsim.machine.ledger import FleetLedger
+from catsim.machine.roles import FACTORY_CHIP, desired_factories, module_name, next_role
 
 _LIVE_TIMEOUT_FACTOR = 4.0
 """Heartbeat leniency for the live focus chip: BP+OSD's bimodal tail (M4)
 can hold its process for whole seconds per decode, so its heartbeats
 legitimately gap in ways a behavioral chip's never do."""
-
-DEMAND_LIMITED = "demand-limited: factory capacity exceeds the workload"
-"""Attribution when factories exist and outpace the configured T demand."""
-
-
-@dataclass
-class _Chip:
-    """The scheduler's view of one registered chip."""
-
-    instance_id: str
-    chip_id: str
-    role: str
-    mode: str
-    blocks: list[BlockAssignment]
-    magic_factories: list[str]
-    nominal_qubits: int
-    modes: list[str]
-    last_seen: float
-    status: ChipStatus | None = None
-    neighbors: list[str] = field(default_factory=list)
-
-    @property
-    def logical_qubits(self) -> int:
-        """Logical qubits this chip's memory blocks host."""
-        return sum(MEMORY_BLOCK_LOGICAL[b.code] for b in self.blocks)
 
 
 class SchedulerService:
@@ -88,8 +64,8 @@ class SchedulerService:
 
         Args:
             sink: Where admissions, mode changes, and statuses are published.
-            unit: The unit chip config (memory-chip composition + the fleet's
-                total T-gate workload demand).
+            unit: The unit chip config (memory-chip composition, the fleet's
+                total T-gate workload demand, module capacity, interconnect).
             source: Component id; becomes the bus topic.
             heartbeat_timeout_s: Silence after which a chip is declared lost.
             status_every_s: Wall seconds between machine roll-ups.
@@ -99,20 +75,18 @@ class SchedulerService:
         self._source = source
         self._heartbeat_timeout_s = heartbeat_timeout_s
         self._status_every_s = status_every_s
-        self._chips: dict[str, _Chip] = {}
+        self._chips: dict[str, ChipRecord] = {}
         self._by_instance: dict[str, str] = {}
         self._next_index = 0
         self._focus: str | None = None
         self._lost_chips = 0
-        self._shots = 0
-        self._logical_errors = 0
-        self._pending_backlog = 0.0  # float: per-status increments are fractional
-        self._backlog_marker = 0.0  # machine seconds already accounted into backlog
+        self._modules = [module_name(0)]
+        self._ledger = FleetLedger(unit.workload, unit.interconnect)
         self._next_status = 0.0
         self._stopped = False
 
     @property
-    def chips(self) -> dict[str, _Chip]:
+    def chips(self) -> dict[str, ChipRecord]:
         """The registered fleet by chip id (read-only view for callers/tests)."""
         return self._chips
 
@@ -120,6 +94,16 @@ class SchedulerService:
     def focus(self) -> str | None:
         """The chip currently holding the live fidelity dial."""
         return self._focus
+
+    @property
+    def modules(self) -> list[str]:
+        """Open modules, oldest first (chips join the newest)."""
+        return list(self._modules)
+
+    @property
+    def ledger(self) -> FleetLedger:
+        """The fleet's accounting (read access for callers/tests)."""
+        return self._ledger
 
     def handle(self, event: AnyEvent) -> bool:
         """Ingest one bus event; returns False only when stopped."""
@@ -137,10 +121,15 @@ class SchedulerService:
             self._deregister(event.chip_id, lost=False)
         elif isinstance(event, SetFocus) and event.target == self._source:
             self._set_focus(event.chip_id)
+        elif isinstance(event, AddModule) and event.target == self._source:
+            self._open_module()
+        elif isinstance(event, SetInterconnect) and event.target == self._source:
+            self._ledger.interconnect.set_severed(event.severed)
+            self._publish_interconnect()
         elif isinstance(event, ShotFinished):
-            self._shots += 1
+            self._ledger.shots += 1
         elif isinstance(event, LogicalError):
-            self._logical_errors += 1
+            self._ledger.logical_errors += 1
         return not self._stopped
 
     def tick(self, now: float) -> None:
@@ -173,47 +162,26 @@ class SchedulerService:
 
     def publish_status(self) -> None:
         """Publish the machine roll-up: paper prediction vs live measurement."""
-        self._accrue_backlog()
-        chips = list(self._chips.values())
-        block_codes = [b.code for c in chips for b in c.blocks]
-        magic = [kind for c in chips for kind in c.magic_factories]
-        prediction = predict_machine(
-            block_codes, [MEMORY_BLOCK_LOGICAL[c] for c in block_codes], magic
-        )
-        paper_qubits = prediction.physical_qubits if chips else 0  # no reservoir-only ghost
-        statuses = [c.status for c in chips if c.status is not None]
-        measured_t_per_day = sum(
-            s.t_done / s.machine_seconds * _DAY_SECONDS for s in statuses if s.machine_seconds > 0
-        )
-        queue = int(self._pending_backlog) + sum(s.t_queue_depth for s in statuses)
-        demand = self._unit.workload.t_per_second
-        stall = prediction.t_stall_reason
-        if not stall and prediction.t_per_day > demand * _DAY_SECONDS:
-            stall = DEMAND_LIMITED
-        focus_logical = self._chips[self._focus].logical_qubits if self._focus else 0
-        per_logical = (
-            self._logical_errors / (self._shots * focus_logical)
-            if self._shots and focus_logical
-            else 0.0
-        )
+        self._accrue()
+        self._hand_over_cross()
         self._sink.publish(
-            MachineStatus(
-                source=self._source,
-                chips=len(chips),
+            build_machine_status(
+                self._source,
+                list(self._chips.values()),
                 lost_chips=self._lost_chips,
-                logical_qubits=prediction.logical_qubits,
-                physical_qubits_nominal=sum(c.nominal_qubits for c in chips),
-                physical_qubits_paper=paper_qubits,
-                predicted_t_per_day=prediction.t_per_day,
-                measured_t_per_day=measured_t_per_day,
-                t_queue_depth=queue,
-                t_stall_reason=stall,
+                modules=len(self._modules),
+                focus_logical=self._chips[self._focus].logical_qubits if self._focus else 0,
+                demand_t_per_second=self._unit.workload.t_per_second,
                 machine_seconds=self._machine_seconds(),
-                measured_shots=self._shots,
-                measured_logical_errors=self._logical_errors,
-                logical_error_per_logical_per_shot=per_logical,
+                ledger=self._ledger,
             )
         )
+        if len(self._modules) > 1:
+            self._publish_interconnect()
+
+    def _publish_interconnect(self) -> None:
+        """Publish the link roll-up (bank, assumed parameters, cross traffic)."""
+        self._sink.publish(self._ledger.interconnect_status(self._source, len(self._modules)))
 
     def _machine_seconds(self) -> float:
         """The fleet's machine clock: the furthest chip's machine time."""
@@ -222,32 +190,62 @@ class SchedulerService:
             default=0.0,
         )
 
-    def _accrue_backlog(self) -> None:
-        """While no factory chip exists, unserved T demand piles up here."""
-        elapsed = self._machine_seconds()
-        if not any(c.role == "factory" for c in self._chips.values()):
-            demand = self._unit.workload.t_per_second
-            self._pending_backlog += demand * max(0.0, elapsed - self._backlog_marker)
-        self._backlog_marker = elapsed
+    def _by_module(self, role: str) -> dict[str, int]:
+        """Chip count per module for one role."""
+        counts: dict[str, int] = {}
+        for chip in self._chips.values():
+            if chip.role == role:
+                counts[chip.module] = counts.get(chip.module, 0) + 1
+        return counts
+
+    def _accrue(self) -> None:
+        """Advance the ledger (backlog + interconnect) to the machine clock."""
+        self._ledger.accrue(
+            self._machine_seconds(), self._by_module("memory"), self._by_module("factory")
+        )
+
+    def _hand_over_cross(self) -> None:
+        """Hand served cross-module gates to the factories as backlog chunks."""
+        factories = [c for c in self._chips.values() if c.role == "factory"]
+        if not factories:
+            return
+        gates = self._ledger.interconnect.take_handover()
+        share, extra = divmod(gates, len(factories))
+        for i, chip in enumerate(factories):
+            backlog = share + (1 if i < extra else 0)
+            if backlog:
+                self._send_assignment(chip, t_backlog=backlog)
+
+    def _open_module(self) -> str:
+        """Open the next module; subsequent chips join it."""
+        name = module_name(len(self._modules))
+        self._modules.append(name)
+        return name
 
     def _admit(self, announce: ChipAnnounce) -> None:
-        """Assign identity, role, mode, and links; idempotent per instance."""
+        """Assign identity, module, role, mode, links; idempotent per instance."""
         if announce.source in self._by_instance:  # re-announce: resend as-is
             self._send_assignment(self._chips[self._by_instance[announce.source]])
             return
-        memory = sum(1 for c in self._chips.values() if c.role == "memory")
-        factory = sum(1 for c in self._chips.values() if c.role == "factory")
-        role = next_role(memory, factory, len(self._unit.chip.blocks) or 1)
+        module = self._modules[-1]
+        if sum(1 for c in self._chips.values() if c.module == module) >= (
+            self._unit.module.capacity_chips
+        ):
+            module = self._open_module()
+        members = [c for c in self._chips.values() if c.module == module]
+        memory = sum(1 for c in members if c.role == "memory")
+        role = next_role(memory, len(members) - memory, len(self._unit.chip.blocks) or 1)
         composition = self._unit.chip if role == "memory" else FACTORY_CHIP
         chip_id = f"chip{self._next_index}"
         self._next_index += 1
         goes_live = self._focus is None and "live" in announce.modes and role == "memory"
-        neighbors = [next(reversed(self._chips))] if self._chips else []
-        chip = _Chip(
+        neighbors = [c.chip_id for c in reversed(self._chips.values()) if c.module == module][:1]
+        chip = ChipRecord(
             instance_id=announce.source,
             chip_id=chip_id,
             role=role,
             mode="live" if goes_live else "behavioral",
+            module=module,
             blocks=[BlockAssignment(family=b.family, code=b.code) for b in composition.blocks],
             magic_factories=list(composition.magic_factories),
             nominal_qubits=announce.nominal_qubits,
@@ -262,14 +260,13 @@ class SchedulerService:
         self._send_assignment(chip)
         self._rebalance()
 
-    def _send_assignment(self, chip: _Chip, t_backlog: int = 0) -> None:
+    def _send_assignment(self, chip: ChipRecord, t_backlog: int = 0) -> None:
         """Publish (or re-publish) one chip's admission."""
-        factories = [c for c in self._chips.values() if c.role == "factory"]
-        demand = (
-            self._unit.workload.t_per_second / len(factories)
-            if chip.role == "factory" and factories
-            else 0.0
-        )
+        demand = 0.0
+        if chip.role == "factory":
+            local = self._ledger.local_demand(self._by_module("memory"), self._by_module("factory"))
+            peers = self._by_module("factory").get(chip.module, 0)
+            demand = local.get(chip.module, 0.0) / peers if peers else 0.0
         self._sink.publish(
             ChipAdmitted(
                 source=self._source,
@@ -277,6 +274,7 @@ class SchedulerService:
                 chip_id=chip.chip_id,
                 role=chip.role,  # type: ignore[arg-type]
                 mode=chip.mode,  # type: ignore[arg-type]
+                module=chip.module,
                 blocks=chip.blocks,
                 magic_factories=chip.magic_factories,
                 t_demand_per_second=demand,
@@ -286,28 +284,30 @@ class SchedulerService:
         )
 
     def _rebalance(self) -> None:
-        """Re-balance roles to the Table I mix and re-split T demand.
+        """Re-balance roles to the Table I mix per module and re-split T demand.
 
-        Role flips prefer the newest chips and never touch the focus chip
-        (the live drill-down must not be yanked out from under the audience).
+        Role flips prefer the newest chips, stay within their module (a
+        factory serves its module's blocks locally — cross-module pairs are
+        spent sparingly, never on the steady-state mix), and never touch the
+        focus chip (the live drill-down must not be yanked from the audience).
         """
-        self._accrue_backlog()
+        self._accrue()
         blocks_per = len(self._unit.chip.blocks) or 1
-        desired = desired_factories(len(self._chips), blocks_per)
-        factories = [c for c in self._chips.values() if c.role == "factory"]
-        flippable = [
-            c
-            for c in reversed(self._chips.values())
-            if c.role == "memory" and c.chip_id != self._focus
-        ]
-        for chip in flippable[: max(0, desired - len(factories))]:
-            chip.role = "factory"
-            chip.blocks = []
-            chip.magic_factories = list(FACTORY_CHIP.magic_factories)
-        factories = [c for c in self._chips.values() if c.role == "factory"]
-        for chip in factories:
-            backlog, self._pending_backlog = int(self._pending_backlog), 0.0  # hand over once
-            self._send_assignment(chip, t_backlog=backlog)
+        for module in self._modules:
+            members = [c for c in self._chips.values() if c.module == module]
+            desired = desired_factories(len(members), blocks_per)
+            current = sum(1 for c in members if c.role == "factory")
+            flippable = [
+                c
+                for c in reversed(self._chips.values())
+                if c.module == module and c.role == "memory" and c.chip_id != self._focus
+            ]
+            for chip in flippable[: max(0, desired - current)]:
+                chip.role = "factory"
+                chip.blocks = []
+                chip.magic_factories = list(FACTORY_CHIP.magic_factories)
+        for chip in [c for c in self._chips.values() if c.role == "factory"]:
+            self._send_assignment(chip, t_backlog=self._ledger.take_pending())
 
     def _deregister(self, chip_id: str, *, lost: bool) -> None:
         """Remove a chip; reclaim its unserved queue; rebalance; move focus."""
@@ -317,7 +317,7 @@ class SchedulerService:
             self._lost_chips += 1
         if chip.role == "factory" and chip.status is not None:
             # Its queued T gates are still owed; hand them to the survivors.
-            self._pending_backlog += chip.status.t_queue_depth
+            self._ledger.add_pending(chip.status.t_queue_depth)
         if self._focus == chip_id:
             self._focus = None
             for candidate in self._chips.values():

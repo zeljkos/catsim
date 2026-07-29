@@ -173,8 +173,43 @@ button.active { border-color: var(--machine); color: var(--machine); }
 /* ---- machine view ---- */
 #panel-machine { margin: 0 1.2rem 1rem; }
 .machine-body { display: flex; gap: 1.4rem; align-items: flex-start; flex-wrap: wrap; }
-.machine-body .tiles { flex: 1.4; min-width: 320px; }
+.machine-body .modules { flex: 1.4; min-width: 320px; display: flex; flex-direction: column; gap: 0.8rem; }
 .machine-summary { flex: 1; min-width: 300px; }
+
+/* Modules (M7): each module is one distinct box; the photonic interconnect
+   sits between them. */
+.module-box {
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: rgba(232, 112, 26, 0.03);
+}
+.module-head { display: flex; align-items: baseline; gap: 0.7rem; margin-bottom: 0.5rem; }
+.module-name { color: var(--machine); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.m-module {
+  font-size: 0.68rem; padding: 0.05rem 0.45rem; border-radius: 4px;
+  border: 1px solid var(--machine); color: var(--machine);
+}
+.interconnect {
+  border: 1px dashed var(--workload);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.2rem;
+  align-items: center;
+  transition: border-color 0.3s;
+}
+.interconnect.severed { border-color: var(--err); background: rgba(239, 68, 68, 0.06); }
+.ic-head { display: flex; align-items: center; gap: 0.6rem; }
+.ic-name { color: var(--workload); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.interconnect.severed .ic-name { color: var(--err); }
+.ic-sever { font-size: 0.72rem; padding: 0.2rem 0.5rem; }
+.ic-bank, .ic-traffic, .ic-params { font-size: 0.75rem; }
+.ic-bank .buf { vertical-align: middle; }
+.ic-traffic .diverges { color: var(--fired); }
+tr[data-type="interconnect_status"] td:first-child { color: var(--workload); }
+tr[data-type="set_interconnect"] td:first-child { color: var(--err); }
 .chip-tile { transition: border-color 0.3s; }
 .chip-tile:has(.state-badge.degraded) { border-color: var(--fired); }
 .m-qubits { margin-bottom: 0.4rem; }

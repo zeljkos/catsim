@@ -37,6 +37,7 @@ class FleetBackend:
         rounds: int = 10,
         seed: int = 0,
         tick_seconds: float = 0.5,
+        behavioral_rate: float = 1.0,
         spawner: Spawner | None = None,
         heartbeat_timeout_s: float = 5.0,
     ) -> None:
@@ -49,6 +50,8 @@ class FleetBackend:
             rounds: SE rounds per live memory shot on chips.
             seed: Base seed passed to every chip process.
             tick_seconds: Live-stack wall pace per SE round.
+            behavioral_rate: Machine seconds per wall second on behavioral
+                chips (1.0 = real time; sweeps fast-forward with more).
             spawner: Chip lifecycle backend; None = local processes.
             heartbeat_timeout_s: Scheduler's chip-loss deadline.
         """
@@ -79,6 +82,8 @@ class FleetBackend:
             str(seed),
             "--pace-ms",
             str(tick_seconds * 1000.0),
+            "--behavioral-rate",
+            str(behavioral_rate),
             "--machine-name",
             unit.name,
         ]

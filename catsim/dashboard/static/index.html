@@ -87,11 +87,12 @@
         <button id="fleet-add" title="start N more chip containers">+N chips</button>
         <button id="fleet-build" title="grow or drain to exactly N chips">build machine of N</button>
         <button id="fleet-drain" title="retire the N newest chips">drain N</button>
+        <button id="fleet-module" title="open the next module: subsequent chips join it over the photonic interconnect">add module</button>
         <span id="fleet-presets"></span>
       </div>
     </div>
     <div class="machine-body">
-      <div id="chip-tiles" class="tiles">
+      <div id="chip-tiles" class="modules">
         <p class="muted" id="machine-empty">no chips announced yet — serve with --machine or --fleet</p>
       </div>
       <div id="machine-summary" class="machine-summary"></div>
@@ -152,6 +153,7 @@
         <option>chip_configured</option>
         <option>chip_status</option>
         <option>machine_status</option>
+        <option>interconnect_status</option>
         <option>chip_announce</option>
         <option>chip_admitted</option>
         <option>chip_heartbeat</option>
@@ -162,6 +164,8 @@
         <option>stop_chip</option>
         <option>set_chip_mode</option>
         <option>set_focus</option>
+        <option>add_module</option>
+        <option>set_interconnect</option>
       </select>
     </div>
     <div class="log-scroll">
@@ -173,7 +177,7 @@
   </section>
 
   <footer class="muted">
-    stabilizer + behavioral simulation calibrated to arXiv:2604.19481<span id="footer-note"></span>
+    stabilizer + behavioral simulation calibrated to arXiv:2604.19481<span id="footer-mod-note"></span><span id="footer-note"></span>
   </footer>
 
   <script type="module" src="/static/app.js"></script>

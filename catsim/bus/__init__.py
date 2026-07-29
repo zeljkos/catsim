@@ -40,6 +40,7 @@ from catsim.bus.factory_events import (
     ReplacementReady,
 )
 from catsim.bus.fleet_events import (
+    AddModule,
     ChipAdmitted,
     ChipAnnounce,
     ChipHeartbeat,
@@ -49,6 +50,7 @@ from catsim.bus.fleet_events import (
     ScaleUp,
     SetChipMode,
     SetFocus,
+    SetInterconnect,
     StopChip,
 )
 from catsim.bus.machine_events import (
@@ -60,6 +62,7 @@ from catsim.bus.machine_events import (
     ChipRole,
     ChipStatus,
     FactoryHealth,
+    InterconnectStatus,
     MachineStatus,
 )
 from catsim.bus.query import QueryError, QueryServer, query
@@ -77,6 +80,7 @@ __all__ = [
     "DEFAULT_BACKEND_ADDRESS",
     "DEFAULT_FRONTEND_ADDRESS",
     "SCHEMA_VERSION",
+    "AddModule",
     "AnyEvent",
     "BlockAccounting",
     "BlockAssignment",
@@ -109,6 +113,7 @@ __all__ = [
     "FactoryRejected",
     "InjectLoss",
     "InjectPauli",
+    "InterconnectStatus",
     "IonLost",
     "LogicalError",
     "LossDetected",
@@ -125,6 +130,7 @@ __all__ = [
     "SetDecoder",
     "SetDecoderSlowdown",
     "SetFocus",
+    "SetInterconnect",
     "SetNoiseScale",
     "SetPace",
     "SetPaused",

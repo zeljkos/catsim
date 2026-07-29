@@ -15,6 +15,7 @@ from catsim.bus import (
     ReplacementDispatched,
     RoundStarted,
     SetDecoderSlowdown,
+    SetInterconnect,
     SetNoiseScale,
     SetPace,
     SetPaused,
@@ -39,8 +40,27 @@ def test_shipped_scenarios_load() -> None:
         "factory-yield",
         "factory-outage",
         "decoder-overload",
+        "interconnect-outage",
     } <= set(names)
     assert all(s.description for s in scenarios)
+
+
+def test_interconnect_outage_severs_then_restores(list_sink: ListSink) -> None:
+    # Relative timeline: the live block is already at shot 500 when the
+    # scenario starts mid-demo (Act 3); steps count from there.
+    scenario = load_scenario("interconnect-outage", SCENARIO_DIR)
+    assert scenario.relative
+    runner = ScenarioRunner(scenario, list_sink)
+    runner.handle(RoundStarted(source="chip0-block0", shot=500, round=0))
+    assert not list_sink.events, "shot 500 is the relative origin, not a trigger"
+    runner.handle(RoundStarted(source="chip0-block0", shot=502, round=0))
+    sever = list_sink.events[-1]
+    assert isinstance(sever, SetInterconnect) and sever.severed
+    assert sever.target == "scheduler"
+    runner.handle(RoundStarted(source="chip0-block0", shot=510, round=0))
+    assert runner.done
+    restore = list_sink.events[-1]
+    assert isinstance(restore, SetInterconnect) and not restore.severed
 
 
 def test_load_by_name_and_by_path() -> None:

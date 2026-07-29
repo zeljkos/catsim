@@ -1,15 +1,18 @@
-"""SchedulerService: admission, role balancing, loss handling, focus, roll-up."""
+"""SchedulerService: admission, modules, role balancing, loss, focus, roll-up."""
 
 import time
 
 from catsim.bus import (
+    AddModule,
     ChipAdmitted,
     ChipAnnounce,
     ChipLost,
     ChipStatus,
+    InterconnectStatus,
     MachineStatus,
     SetChipMode,
     SetFocus,
+    SetInterconnect,
 )
 from catsim.machine import SchedulerService, load_machine_config
 from tests.conftest import REPO_ROOT, ListSink
@@ -167,6 +170,108 @@ def test_set_focus_flips_modes(list_sink: ListSink) -> None:
         ("chip2", "live"),
     ]
     assert scheduler.focus == "chip2"
+
+
+def _report_time(scheduler: SchedulerService, chip_id: str, machine_seconds: float) -> None:
+    """Feed the scheduler one chip status carrying only the machine clock."""
+    chip = scheduler.chips[chip_id]
+    scheduler.handle(
+        ChipStatus(
+            source=chip_id,
+            chip_id=chip_id,
+            state="ok",
+            role=chip.role,  # type: ignore[arg-type]
+            module=chip.module,
+            blocks=[],
+            factories=[],
+            utilization=1.0,
+            machine_seconds=machine_seconds,
+        )
+    )
+
+
+def test_module_a_fills_to_capacity_then_b_opens(list_sink: ListSink) -> None:
+    scheduler = _scheduler(list_sink)
+    _announce(scheduler, 41)  # one past the configured capacity of 40
+    modules = [c.module for c in scheduler.chips.values()]
+    assert modules.count("A") == 40
+    assert modules.count("B") == 1
+    assert scheduler.modules == ["A", "B"]
+    admissions = {a.chip_id: a for a in _admissions(list_sink)}
+    assert admissions["chip40"].module == "B"
+    assert admissions["chip40"].bell_neighbors == []  # no transport link across modules
+
+
+def test_add_module_opens_b_before_a_is_full(list_sink: ListSink) -> None:
+    scheduler = _scheduler(list_sink)
+    _announce(scheduler, 3)
+    scheduler.handle(AddModule(source="dash", target="scheduler"))
+    _announce(scheduler, 1, start=3)
+    assert scheduler.modules == ["A", "B"]
+    assert scheduler.chips["chip3"].module == "B"
+
+
+def test_roles_balance_per_module_at_80_chips(list_sink: ListSink) -> None:
+    scheduler = _scheduler(list_sink)
+    _announce(scheduler, 80)  # two full modules
+    for module in ("A", "B"):
+        members = [c for c in scheduler.chips.values() if c.module == module]
+        assert len(members) == 40
+        assert sum(1 for c in members if c.role == "factory") == 2
+    # Each factory serves its own module's local demand: 12 x 0.5 share
+    # x 0.75 local fraction / 2 factories = 2.25 T/s.
+    latest = {a.chip_id: a for a in _admissions(list_sink)}
+    for chip in scheduler.chips.values():
+        if chip.role == "factory":
+            assert abs(latest[chip.chip_id].t_demand_per_second - 2.25) < 1e-9
+
+
+def test_interconnect_status_appears_with_the_second_module(list_sink: ListSink) -> None:
+    scheduler = _scheduler(list_sink)
+    _announce(scheduler, 40)
+    scheduler.publish_status()
+    assert not any(isinstance(e, InterconnectStatus) for e in list_sink.events)
+    _announce(scheduler, 40, start=40)
+    scheduler.publish_status()
+    status = [e for e in list_sink.events if isinstance(e, InterconnectStatus)][-1]
+    assert status.modules == 2
+    assert status.pair_rate_hz == 100.0  # the ASSUMED config value, echoed
+    assert not status.severed
+    roll_up = [e for e in list_sink.events if isinstance(e, MachineStatus)][-1]
+    assert roll_up.modules == 2
+
+
+def test_cross_module_gates_ride_the_bank_and_reach_factories(list_sink: ListSink) -> None:
+    scheduler = _scheduler(list_sink)
+    _announce(scheduler, 80)
+    _report_time(scheduler, "chip0", 10.0)  # 10 machine-seconds elapse
+    scheduler.publish_status()
+    status = [e for e in list_sink.events if isinstance(e, InterconnectStatus)][-1]
+    assert status.cross_demand_per_second == 3.0  # 12 T/s x 0.25 assumed
+    assert status.cross_t_served == 30
+    assert status.cross_queue_depth == 0
+    handed = [a.t_backlog for a in _admissions(list_sink) if a.t_backlog]
+    assert sum(handed) == 30  # served cross gates handed to factories as backlog
+
+
+def test_severed_link_drains_the_bank_then_queues_cross_ops(list_sink: ListSink) -> None:
+    scheduler = _scheduler(list_sink)
+    _announce(scheduler, 80)
+    _report_time(scheduler, "chip0", 10.0)
+    scheduler.publish_status()  # bank full at 60
+    scheduler.handle(SetInterconnect(source="dash", target="scheduler", severed=True))
+    assert [e for e in list_sink.events if isinstance(e, InterconnectStatus)][-1].severed
+    _report_time(scheduler, "chip0", 50.0)  # 40 severed machine-seconds
+    scheduler.publish_status()
+    status = [e for e in list_sink.events if isinstance(e, InterconnectStatus)][-1]
+    assert status.bank == 0  # 60 banked - 120 demanded
+    assert status.cross_queue_depth == 60
+    scheduler.handle(SetInterconnect(source="dash", target="scheduler", severed=False))
+    _report_time(scheduler, "chip0", 52.0)  # 200 pairs herald back
+    scheduler.publish_status()
+    status = [e for e in list_sink.events if isinstance(e, InterconnectStatus)][-1]
+    assert status.cross_queue_depth == 0
+    assert status.bank == 60
 
 
 def test_roll_up_aggregates_prediction_and_measurement(list_sink: ListSink) -> None:

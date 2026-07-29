@@ -21,6 +21,7 @@ from catsim.bus import (
     RoundStarted,
     RunFinished,
     SetDecoderSlowdown,
+    SetInterconnect,
     SetNoiseScale,
     SetPace,
     SetPaused,
@@ -68,6 +69,7 @@ class ScenarioStep(BaseModel):
     set_pace_seconds: float | None = None
     set_paused: bool | None = None
     set_decoder_slowdown: float | None = None
+    set_interconnect_severed: bool | None = None
 
     @model_validator(mode="after")
     def _exactly_one_action(self) -> ScenarioStep:
@@ -79,6 +81,7 @@ class ScenarioStep(BaseModel):
             self.set_pace_seconds,
             self.set_paused,
             self.set_decoder_slowdown,
+            self.set_interconnect_severed,
         ]
         if sum(a is not None for a in actions) != 1:
             raise ValueError("each step must set exactly one action")
@@ -86,7 +89,15 @@ class ScenarioStep(BaseModel):
 
     def command(
         self, target: str
-    ) -> InjectPauli | InjectLoss | SetNoiseScale | SetPace | SetPaused | SetDecoderSlowdown:
+    ) -> (
+        InjectPauli
+        | InjectLoss
+        | SetNoiseScale
+        | SetPace
+        | SetPaused
+        | SetDecoderSlowdown
+        | SetInterconnect
+    ):
         """Build the bus command this step publishes when it fires."""
         if self.inject is not None:
             return InjectPauli(
@@ -100,8 +111,11 @@ class ScenarioStep(BaseModel):
             return SetPace(source=_SOURCE, target=target, tick_seconds=self.set_pace_seconds)
         if self.set_paused is not None:
             return SetPaused(source=_SOURCE, target=target, paused=self.set_paused)
-        assert self.set_decoder_slowdown is not None
-        return SetDecoderSlowdown(source=_SOURCE, target=target, factor=self.set_decoder_slowdown)
+        if self.set_decoder_slowdown is not None:
+            factor = self.set_decoder_slowdown
+            return SetDecoderSlowdown(source=_SOURCE, target=target, factor=factor)
+        assert self.set_interconnect_severed is not None
+        return SetInterconnect(source=_SOURCE, target=target, severed=self.set_interconnect_severed)
 
 
 class Scenario(BaseModel):
@@ -109,7 +123,9 @@ class Scenario(BaseModel):
 
     ``target: "*"`` broadcasts every command to all components (block and
     factories alike) and triggers on any component's rounds — the shape the
-    factory-yield sweep needs.
+    factory-yield sweep needs. ``relative: true`` counts step shots from the
+    first round observed after the scenario starts instead of from shot 0 —
+    for scenarios run mid-demo against a block that has been up for a while.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -117,6 +133,7 @@ class Scenario(BaseModel):
     name: str
     description: str
     target: str = "block0"
+    relative: bool = False
     steps: list[ScenarioStep]
 
 
@@ -149,6 +166,7 @@ class ScenarioRunner:
         self._scenario = scenario
         self._sink = sink
         self._fired = [False] * len(scenario.steps)
+        self._base_shot: int | None = None
 
     @property
     def done(self) -> bool:
@@ -161,7 +179,9 @@ class ScenarioRunner:
             return False
         target = self._scenario.target
         if isinstance(event, RoundStarted) and (event.source == target or target == "*"):
-            now = (event.shot, event.round)
+            if self._base_shot is None:
+                self._base_shot = event.shot if self._scenario.relative else 0
+            now = (event.shot - self._base_shot, event.round)
             for i, step in enumerate(self._scenario.steps):
                 if not self._fired[i] and now >= (step.at.shot, step.at.round):
                     self._fired[i] = True

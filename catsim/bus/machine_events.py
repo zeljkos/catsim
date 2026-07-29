@@ -1,9 +1,10 @@
-"""Machine-layer event schemas — the M5 slice of the bus contract.
+"""Machine-layer event schemas — the M5/M7 slice of the bus contract.
 
 Exists so the machine view renders the tiled machine from bus events alone:
 chip announcements carry composition plus paper-accounting totals (Table V
 prices next to the nominal label), periodic statuses carry health, buffers,
-queues, and the predicted-vs-measured panel's numbers.
+queues, and the predicted-vs-measured panel's numbers. M7 adds module
+membership on every chip event and the photonic-interconnect roll-up.
 """
 
 from __future__ import annotations
@@ -80,6 +81,7 @@ class ChipConfigured(Event):
     type: Literal["chip_configured"] = "chip_configured"
     chip_id: str
     role: ChipRole = "memory"
+    module: str = "A"
     machine_name: str
     nominal_qubits: int
     paper_qubits: int
@@ -103,6 +105,7 @@ class ChipStatus(Event):
     state: ComponentState
     role: ChipRole = "memory"
     mode: ChipMode = "live"
+    module: str = "A"
     blocks: list[BlockHealth]
     factories: list[FactoryHealth]
     utilization: float = Field(ge=0.0, le=1.0)
@@ -122,6 +125,7 @@ class MachineStatus(Event):
     type: Literal["machine_status"] = "machine_status"
     chips: int = Field(ge=0)
     lost_chips: int = Field(default=0, ge=0)
+    modules: int = Field(default=1, ge=1)
     logical_qubits: int = Field(ge=0)
     physical_qubits_nominal: int = Field(ge=0)
     physical_qubits_paper: int = Field(ge=0)
@@ -133,3 +137,25 @@ class MachineStatus(Event):
     measured_shots: int = Field(default=0, ge=0)
     measured_logical_errors: int = Field(default=0, ge=0)
     logical_error_per_logical_per_shot: float = Field(default=0.0, ge=0.0)
+
+
+class InterconnectStatus(Event):
+    """Periodic photonic-interconnect roll-up (M7); published with ≥2 modules.
+
+    The link parameters echoed here (``pair_rate_hz``, ``latency_s``,
+    ``bank_capacity``) are ASSUMPTIONS from the machine config, NOT from the
+    paper — the dashboard must present them as assumed. Cross-module traffic
+    is a first-class metric: served T gates ride banked pairs; when the link
+    is severed the bank drains and ``cross_queue_depth`` grows.
+    """
+
+    type: Literal["interconnect_status"] = "interconnect_status"
+    modules: int = Field(ge=1)
+    severed: bool = False
+    bank: int = Field(ge=0)
+    bank_capacity: int = Field(gt=0)
+    pair_rate_hz: float = Field(gt=0.0)
+    latency_s: float = Field(ge=0.0)
+    cross_demand_per_second: float = Field(ge=0.0)
+    cross_t_served: int = Field(default=0, ge=0)
+    cross_queue_depth: int = Field(default=0, ge=0)

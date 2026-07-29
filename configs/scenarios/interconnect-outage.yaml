@@ -1,0 +1,23 @@
+# The photonic link between modules is severed mid-run (M7 — requires the
+# two-module machine, Act 3): both modules keep computing independently on
+# their local factories, but cross-module operations now draw down the banked
+# Bell pairs — watch the bank gauge drain in the machine view, then the
+# cross-module queue grow once it hits zero (the partition is on screen).
+# Restore the link: pairs herald back at the (ASSUMED) ~100/s rate, the bank
+# refills, the queue drains through the factories, and no logical errors come
+# from the outage itself — a severed interconnect is a throughput event, not
+# a correctness event.
+# Rounds trigger on any live block ("*"); both steps steer the scheduler.
+# relative: this scenario runs late in the demo (Act 3), so step shots count
+# from the first round after "run", not from the machine's boot.
+name: interconnect-outage
+description: "photonic link severed: modules run independently, cross-module ops queue against the draining bank; restored: bank refills, queue drains"
+target: "*"
+relative: true
+steps:
+  - at: { shot: 2, round: 0 }
+    target: scheduler
+    set_interconnect_severed: true # the outage: heralding stops, the bank is all there is
+  - at: { shot: 10, round: 0 }
+    target: scheduler
+    set_interconnect_severed: false # restore: refill at the assumed pair rate, drain the queue

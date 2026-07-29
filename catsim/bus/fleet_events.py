@@ -1,10 +1,11 @@
-"""Elastic-runtime event schemas — the M6 slice of the bus contract.
+"""Elastic-runtime event schemas — the M6/M7 slice of the bus contract.
 
 Exists so the machine is whatever chips are currently registered: a booting
 chip container knows only the bus address and announces itself; the scheduler
-admits it with an identity, a role, and a fidelity mode; heartbeats keep it
-registered; the provisioner grows and drains the fleet on exactly two
-commands. Scaling and failure share this one vocabulary.
+admits it with an identity, a role, a module, and a fidelity mode; heartbeats
+keep it registered; the provisioner grows and drains the fleet on exactly two
+commands. Scaling and failure share this one vocabulary. M7 adds module
+membership and the photonic-interconnect controls.
 """
 
 from __future__ import annotations
@@ -43,6 +44,10 @@ class ChipAdmitted(Command):
     chip_id: str
     role: ChipRole
     mode: ChipMode
+    module: str = "A"
+    """Which module this chip belongs to (M7): the scheduler fills a module
+    to capacity, then opens the next; chips across modules share only the
+    photonic interconnect."""
     blocks: list[BlockAssignment] = []
     magic_factories: list[str] = []
     t_demand_per_second: float = Field(default=0.0, ge=0.0)
@@ -119,3 +124,25 @@ class SetFocus(Command):
 
     type: Literal["set_focus"] = "set_focus"
     chip_id: str
+
+
+class AddModule(Command):
+    """Open the next module (``target`` = the scheduler; M7).
+
+    Subsequent chips join the newly opened module; scaling past the current
+    module's capacity opens the next one implicitly, so this command exists
+    for opening a module before the previous one is full.
+    """
+
+    type: Literal["add_module"] = "add_module"
+
+
+class SetInterconnect(Command):
+    """Sever or restore the inter-module photonic link (``target`` = scheduler).
+
+    The interconnect-outage kill switch (M7): severed, the Bell-pair bank
+    stops refilling and cross-module operations queue against what remains.
+    """
+
+    type: Literal["set_interconnect"] = "set_interconnect"
+    severed: bool

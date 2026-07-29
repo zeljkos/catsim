@@ -52,6 +52,7 @@ def test_admission_publishes_composition_and_status(
     configured = next(e for e in list_sink.events if isinstance(e, ChipConfigured))
     assert configured.chip_id == "chip3"
     assert configured.role == "memory"
+    assert configured.module == "A"
     assert configured.paper_qubits == 262  # 220 memory + 42 cat (Table V)
     assert configured.blocks[0].block_id == "chip3-block0"
     status = next(e for e in list_sink.events if isinstance(e, ChipStatus))
@@ -103,6 +104,7 @@ def test_factory_chip_serves_demand_and_handed_backlog(
         chip_id="chip17",
         role="factory",
         mode="behavioral",
+        module="B",
         blocks=[],
         magic_factories=["ch2"],
         t_demand_per_second=12.0,
@@ -113,6 +115,7 @@ def test_factory_chip_serves_demand_and_handed_backlog(
     runtime.publish_status()
     status = [e for e in list_sink.events if isinstance(e, ChipStatus)][-1]
     assert status.role == "factory"
+    assert status.module == "B"  # module membership echoed on every status
     assert status.t_done > 100  # demand plus the handed-over backlog got served
 
 

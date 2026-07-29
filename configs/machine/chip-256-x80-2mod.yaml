@@ -1,0 +1,48 @@
+# chip-256 × 80, two modules: the 2028-scale machine as a STATIC batch-model
+# config (catsim machine-report / scaling sweeps). 80 homogeneous memory chips
+# in two modules of 40; the ELASTIC runtime (catsim serve --fleet, then grow
+# past module capacity or press "add module") assembles the same 80 chips with
+# per-module Table I role balancing instead — 2 CH2 factory chips per module.
+#
+# SOURCING (honesty requirement, M7): the two-module photonic interconnect is
+# NOT from arXiv:2604.19481 — the paper is a single-machine blueprint, and its
+# "photonic" references are laser delivery, not interconnects. This tier is
+# sourced from IonQ's public roadmap (2028: 20,000 qubits + photonic
+# interconnect); every interconnect parameter below is an ASSUMPTION.
+name: chip-256-x80-2mod
+description: "80x [1x Q70 + cat unit] in 2 modules of 40 — photonic interconnect between modules (parameters ASSUMED, not from the paper)"
+chips: 80
+chip:
+  nominal_qubits: 256
+  accounting: paper
+  blocks:
+    - family: bb
+      code: q70
+  magic_factories: []
+
+# Behavioral model parameters — assumptions, NOT from the paper (see
+# chip-256.yaml for what each shapes).
+assumptions:
+  cat_buffer_capacity: 24
+  cat_attempts_per_sec: 2
+  status_every_rounds: 5
+
+# cross_module_fraction is an ASSUMPTION (workload locality): NUMA-style
+# mostly-local traffic; the paper says nothing about inter-module locality.
+workload:
+  t_per_second: 12.0
+  cross_module_fraction: 0.25
+
+module:
+  capacity_chips: 40
+
+# Photonic interconnect — ALL VALUES ARE ASSUMPTIONS (see header):
+#   pair_rate_hz: ASSUMPTION — demonstrated ion-photon heralded-entanglement
+#     rates in the literature are order 10^2 pairs/s, vs the intra-module
+#     transport-based Bell factories.
+#   latency_s: ASSUMPTION — heralding round-trip.
+#   bank_capacity: ASSUMPTION — cross-module pairs banked ahead of demand.
+interconnect:
+  pair_rate_hz: 100.0
+  latency_s: 0.01
+  bank_capacity: 60

@@ -58,6 +58,38 @@ class ChipComposition(BaseModel):
         return self
 
 
+class ModuleConfig(BaseModel):
+    """How chips group into modules (M7): one module fills, the next opens.
+
+    A module is one machine chassis's worth of chips; chips within a module
+    share transport-based Bell links, chips across modules only the photonic
+    interconnect. Capacity ~40 tracks one 2027-scale machine per module.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    capacity_chips: int = Field(default=40, gt=0)
+
+
+class InterconnectConfig(BaseModel):
+    """Inter-module photonic link parameters — ASSUMPTIONS, not from the paper.
+
+    arXiv:2604.19481 is a single-machine blueprint (its "photonic" references
+    are laser delivery, not interconnects); this tier is sourced from IonQ's
+    public roadmap (2028: photonic interconnect) and field literature.
+    ``pair_rate_hz`` defaults to order 10^2 pairs/s — demonstrated ion-photon
+    heralded-entanglement rates in the literature — versus intra-module
+    transport-based Bell factories. Every value here must be presented as
+    assumed wherever it is shown.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    pair_rate_hz: float = Field(default=100.0, gt=0.0)
+    latency_s: float = Field(default=0.01, ge=0.0)
+    bank_capacity: int = Field(default=60, gt=0)
+
+
 class ModelAssumptions(BaseModel):
     """Behavioral parameters of the machine model that are NOT from the paper.
 
@@ -82,6 +114,12 @@ class WorkloadConfig(BaseModel):
     """T-gate demand; default ~12/s tracks the paper's ~1M T/day reference
     throughput (CLAUDE.md canonical parameters)."""
 
+    cross_module_fraction: float = Field(default=0.25, ge=0.0, le=1.0)
+    """ASSUMPTION (workload locality, M7): the fraction of T demand that spans
+    modules when more than one module is populated. The paper's single-machine
+    workloads say nothing about inter-module locality; NUMA-style mostly-local
+    traffic is assumed and must be marked as such where displayed."""
+
 
 class MachineConfig(BaseModel):
     """A machine instance: N copies of one chip composition plus model knobs."""
@@ -94,6 +132,8 @@ class MachineConfig(BaseModel):
     chip: ChipComposition
     assumptions: ModelAssumptions = ModelAssumptions()
     workload: WorkloadConfig = WorkloadConfig()
+    module: ModuleConfig = ModuleConfig()
+    interconnect: InterconnectConfig = InterconnectConfig()
 
 
 def load_machine_config(spec: str | Path, machine_dir: Path = DEFAULT_MACHINE_DIR) -> MachineConfig:

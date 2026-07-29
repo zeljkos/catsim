@@ -86,6 +86,40 @@ def build_parser() -> argparse.ArgumentParser:
     pvm.add_argument("--seed", type=int, default=0)
     pvm.add_argument("--out-dir", type=Path, default=Path("reports"))
 
+    sweep = sub.add_parser(
+        "scaling-report",
+        help="M7 sweep: predicted vs measured from 1 to ~80 chips + interconnect "
+        "sensitivity; writes reports/m7_scaling.{csv,png} and m7_interconnect.csv",
+    )
+    sweep.add_argument("--machine", default="chip-256", help="unit-chip machine config")
+    sweep.add_argument("--noise", default="paper-baseline")
+    sweep.add_argument("--ns", type=int, nargs="+", default=[1, 5, 10, 20, 40, 60, 80])
+    sweep.add_argument(
+        "--measure-ns",
+        type=int,
+        nargs="*",
+        default=None,
+        help="fleet sizes to actually boot and measure (default: every --ns value); "
+        "pass with no values for a prediction-only sweep",
+    )
+    sweep.add_argument(
+        "--wall-seconds", type=float, default=12.0, help="measurement window per fleet"
+    )
+    sweep.add_argument(
+        "--behavioral-rate",
+        type=float,
+        default=20.0,
+        help="machine seconds per wall second on behavioral chips (fast-forward)",
+    )
+    sweep.add_argument(
+        "--rates",
+        type=float,
+        nargs="+",
+        default=[1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 1000.0],
+        help="heralded pair rates to sweep (pairs/s; every value an ASSUMPTION)",
+    )
+    sweep.add_argument("--out-dir", type=Path, default=Path("reports"))
+
     node = sub.add_parser(
         "node",
         help="one fleet node — role from --role or CATSIM_ROLE "
@@ -375,6 +409,48 @@ def _cmd_machine_report(args: argparse.Namespace) -> None:
     print(f"wrote {csv_path}")
 
 
+def _cmd_scaling_report(args: argparse.Namespace) -> None:
+    """Run the M7 scaling + interconnect sweeps; write CSVs and the PNG artifact."""
+    unit = machine.load_machine_config(args.machine)
+    measure_ns = set(args.ns if args.measure_ns is None else args.measure_ns)
+    points: list[machine.ScalingPoint] = []
+    for n in args.ns:
+        if n in measure_ns:
+            print(f"measuring fleet of {n} chips ...", flush=True)
+            point = machine.measure_point(
+                unit,
+                n,
+                wall_seconds=args.wall_seconds,
+                behavioral_rate=args.behavioral_rate,
+                noise_name=args.noise,
+            )
+            print(
+                f"  n={n}  modules={point.modules}  "
+                f"mix={point.memory_chips}m/{point.factory_chips}f  "
+                f"T/day predicted {point.predicted_t_per_day:.3g} "
+                f"measured {point.measured_t_per_day:.3g}  "
+                f"cross served {point.cross_t_served}",
+                flush=True,
+            )
+        else:
+            point = machine.predict_point(unit, n)
+        points.append(point)
+    link_points = machine.sweep_interconnect(unit, args.rates)
+    csv_path = args.out_dir / "m7_scaling.csv"
+    link_csv_path = args.out_dir / "m7_interconnect.csv"
+    png_path = args.out_dir / "m7_scaling.png"
+    machine.write_scaling_csv(points, csv_path)
+    machine.write_interconnect_csv(link_points, link_csv_path)
+    machine.plot_scaling(points, link_points, png_path)
+    for p in link_points:
+        note = "link-limited" if p.link_limited else "keeps up"
+        print(
+            f"pair rate {p.pair_rate_hz:g}/s: serves {p.served_per_second:.2f}/s "
+            f"of {p.cross_demand_per_second:g}/s cross demand — {note}"
+        )
+    print(f"wrote {csv_path}, {link_csv_path} and {png_path}")
+
+
 def _cmd_node(args: argparse.Namespace) -> None:
     """Run one fleet node in the selected role until interrupted."""
     if args.role == "chip":
@@ -504,6 +580,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_live(args)
     elif args.command == "machine-report":
         _cmd_machine_report(args)
+    elif args.command == "scaling-report":
+        _cmd_scaling_report(args)
     elif args.command == "node":
         _cmd_node(args)
     elif args.command == "serve":

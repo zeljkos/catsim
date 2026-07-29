@@ -350,6 +350,7 @@ class ChipRuntime:
                 state="ok" if healthy else "degraded",
                 role=self._admission.role,
                 mode=self._admission.mode,
+                module=self._admission.module,
                 blocks=[
                     BlockHealth(
                         block_id=b.block_id,
@@ -448,6 +449,7 @@ class ChipRuntime:
                 source=admission.chip_id,
                 chip_id=admission.chip_id,
                 role=admission.role,
+                module=admission.module,
                 machine_name=self._machine_name,
                 nominal_qubits=self._nominal_qubits,
                 paper_qubits=bill.total,

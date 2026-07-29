@@ -4,6 +4,70 @@ One beat per milestone, per the charter convention: **show** (what's on screen),
 **say** (the one idea the audience takes away), **stat** (the measured number that
 backs it — from this repo's artifacts, never quoted from memory).
 
+## M7 — the second module, over a link we had to assume
+
+**Show.** The full three-act arc, `make demo`, every step a dashboard button.
+Act 1: one chip, live badge, real syndromes (the M5/M6 beats compressed to one
+breath). Act 2: type **39**, press **+N chips** — module A fills to 40 tiles
+(228 logical / 10,240 nominal / 10,502 paper-accounted). Act 3: press **+N
+chips** again with 40 (module A is at its configured capacity, so the scheduler
+opens module B automatically — or press **add module** first to make the beat
+explicit): a SECOND box appears in the machine view, 40 more tiles assemble
+inside it, and between the boxes sits a dashed blue element the machine has not
+had until now — **photonic interconnect**, with a Bell-pair bank gauge filling
+to 60/60, its parameters printed next to it and labeled **ASSUMED, not from the
+paper**. The footer changes to say exactly that. Every chip tile now wears its
+module letter; cross-module T traffic (3.0 gates/s of the 12/s workload) is a
+first-class metric on the link. Then the closing chaos beat: run the
+`interconnect-outage` scenario. The link goes red **SEVERED** — both modules
+keep computing on their own factories (NUMA: local traffic doesn't care) —
+while the bank gauge drains on screen, hits zero, and the cross-module queue
+climbs. Restore: pairs herald back at the assumed ~100/s, the queue flushes
+through the factories in about two seconds, the bank refills, and the
+logical-error counter has not moved. `make reset` → clean slate.
+
+**Say.** One machine ends where its trap can no longer be one chassis; past
+that, entanglement has to travel by photon, and demonstrated ion-photon
+heralded rates are order 10² pairs/s — orders slower than the intra-module
+transport Bell links. So the second module is a NUMA story: the scheduler
+places work local-first, banks the scarce cross-module pairs, and spends them
+sparingly; a severed link is a *throughput* event (queues), never a
+*correctness* event (logical errors) — the closing stat is the counter that
+did not move. Second idea, said plainly because the charter requires it: the
+paper is a single-machine blueprint — this whole tier is modeled from IonQ's
+public roadmap, and every interconnect parameter on screen is an assumption,
+labeled as such in the configs, the UI footer, and the report artifact.
+
+**Stat.** (seeded; three acts + outage driven through the dashboard command
+API; sweep artifacts `reports/m7_scaling.{csv,png}`, `reports/m7_interconnect.csv`
+via `catsim scaling-report`; link/scheduler dynamics pinned in `tests/machine/`)
+
+| metric | value |
+|---|---|
+| Act 2: +39 chips | 40 chips registered in 5.1 s, one module, roles 38 memory / 2 CH2 |
+| Act 3: +40 chips | 80 chips in 5.3 s, module B opened at capacity 40, per-module role mix 38m/2f × 2, bank full (60/60) ~1 s after B populated |
+| capacity at 80 chips | 456 logical / 20,480 nominal / 20,804 paper-accounted vs roadmap marker 1,600 / 20,000 — divergence displayed with the 1e-7-vs-1e-10 reconciliation note on the artifact |
+| T/day at 80 chips | predicted capacity 4.59M (4× CH2); measured 1.05M — demand-limited at the 12 T/s workload, flat from 20 → 80 chips (the demand line in the artifact) |
+| cross-module traffic | 3.0 gates/s (12 T/s × 0.25 assumed locality fraction); 921 cross gates served over 307 machine-s at 80 chips |
+| interconnect-outage | severed → bank 60→0 in ~20 s (drain rate = cross demand), queue peaked 80; restored → queue drained + bank refull in 1.9 s; **0 logical errors in the outage window** |
+| link sensitivity sweep | link-limited below 3 pairs/s (= cross demand); at the assumed 100 pairs/s, ~33× headroom — the ASSUMPTION would have to be wrong by >30× before the link gates this workload |
+| reset | `make reset` from 81 stray chip processes: 1.5 s (<10 s budget) |
+
+Numbers pass (M7): the M4/M5/M6 stat tables below were re-verified against
+current code — the prediction pins (Table I reproductions), factory acceptance
+baselines, and fleet dynamics are enforced by `make check` (green ×3 at M7
+close); growth re-measured under M7 module-aware admission (40 chips in 5.1 s
+vs M6's 4.3 s — same one-by-one choreography, now with per-module balancing).
+
+Findings worth repeating: (1) scenario timelines were absolute shot numbers, so
+any scenario run mid-demo would fire every step at once — Act 3's outage forced
+`relative: true` scenarios (steps count from the first round after "run").
+(2) Graceful teardown of 80 chips exceeds a 15 s window (the provisioner reaps
+sequentially); `make reset` is the rehearsed path and clears 81 processes in
+1.5 s. (3) The locality split makes a young module honest: until module B earns
+its own factory chip (~18 chips), B's entire demand share rides the photonic
+link — the cross-traffic metric jumps, then falls as the role mix catches up.
+
 ## M6 — the machine grown live, 1 → 40 chips
 
 **Show.** `make demo` (process fallback) or `make demo-docker` (real containers):

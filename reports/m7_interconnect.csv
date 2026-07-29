@@ -1,0 +1,8 @@
+pair_rate_hz,cross_demand_per_second,served_per_second,final_queue_depth,link_limited
+1.0,3.0,1.0,600,True
+3.0,3.0,3.0,0,False
+10.0,3.0,3.0,0,False
+30.0,3.0,3.0,0,False
+100.0,3.0,3.0,0,False
+300.0,3.0,3.0,0,False
+1000.0,3.0,3.0,0,False

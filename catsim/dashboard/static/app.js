@@ -19,6 +19,7 @@ const machinePanel = createMachinePanel(
   () => $("machine-summary"),
   () => $("footer-note"),
   (chipId) => focusChip(chipId),
+  (command) => sendCommand(command),
 );
 let decoderPanel = null; // built in main() — needs the YAML thresholds
 
@@ -162,6 +163,7 @@ async function onEvent(ev) {
     case "chip_status":
     case "chip_lost":
     case "chip_left":
+    case "interconnect_status":
       machinePanel.onEvent(ev);
       break;
   }
@@ -338,6 +340,8 @@ function wireFleet() {
     sendCommand({ type: "scale_up", n: n(), target: "provisioner" }));
   $("fleet-drain").addEventListener("click", () =>
     sendCommand({ type: "drain", n: n(), target: "provisioner" }));
+  $("fleet-module").addEventListener("click", () =>
+    sendCommand({ type: "add_module", target: "scheduler" }));
   $("fleet-build").addEventListener("click", () => {
     const target = n();
     if (target > fleetChips) {
