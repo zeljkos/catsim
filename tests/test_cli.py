@@ -21,6 +21,12 @@ def test_parser_knows_all_commands() -> None:
     assert parser.parse_args(["serve"]).command == "serve"
 
 
+def test_serve_accepts_machine_config() -> None:
+    args = build_parser().parse_args(["serve", "--machine", "chip-256"])
+    assert args.machine == "chip-256"
+    assert build_parser().parse_args(["serve"]).machine is None  # single-block mode default
+
+
 def test_live_prints_summary(capsys: pytest.CaptureFixture[str]) -> None:
     main(
         [

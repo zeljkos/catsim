@@ -2,8 +2,9 @@
 
 Exists as the single source of truth for what services may say to each other;
 changing any model is a breaking change requiring a schema version bump.
-Factory and loss-recovery events live in :mod:`catsim.bus.factory_events`;
-the full discriminated union and wire codec in :mod:`catsim.bus.codec`.
+Factory and loss-recovery events live in :mod:`catsim.bus.factory_events`,
+machine-layer events in :mod:`catsim.bus.machine_events`; the full
+discriminated union and wire codec in :mod:`catsim.bus.codec`.
 """
 
 from __future__ import annotations
@@ -12,8 +13,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 5
-"""v5: decode_queue (rounds awaiting decode at the decoder service) and the
+SCHEMA_VERSION = 6
+"""v6: machine slice (chip_configured/chip_status/machine_status in
+machine_events.py) — chip composition with Table V paper accounting, per-chip
+health, and the predicted-vs-measured roll-up.
+v5: decode_queue (rounds awaiting decode at the decoder service) and the
 set_decoder_slowdown command (runtime throttle — the decoder-overload knob).
 v4: factory events (configured/attempt/accepted/rejected) and the loss
 recovery path (loss_detected, replacement_dispatched, replacement_ready);

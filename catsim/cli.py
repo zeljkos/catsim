@@ -13,10 +13,6 @@ from pathlib import Path
 
 from catsim import codes, component, dashboard, decoder, machine
 
-_DEFAULT_DECODER = {"surface": "pymatching", "gb": "bposd"}
-"""Family-appropriate default: matching needs a graphlike DEM, which qLDPC
-hyperedges never decompose into; BP+OSD consumes any DEM."""
-
 
 def build_parser() -> argparse.ArgumentParser:
     """Define the CLI surface: one subcommand per library entry point."""
@@ -75,7 +71,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="pace per SE round; 0.006 = the paper's 6 ms SEC",
     )
 
+    pvm = sub.add_parser("machine-report", help="predicted-vs-measured for a machine config (M5)")
+    pvm.add_argument("--machine", default="chip-256", help="machine config name/path")
+    pvm.add_argument("--noise", default="paper-baseline")
+    pvm.add_argument("--machine-seconds", type=float, default=600.0)
+    pvm.add_argument("--shots", type=int, default=50)
+    pvm.add_argument("--rounds", type=int, default=10)
+    pvm.add_argument("--seed", type=int, default=0)
+    pvm.add_argument("--out-dir", type=Path, default=Path("reports"))
+
     serve = sub.add_parser("serve", help="dashboard: live block + decoder + web UI")
+    serve.add_argument(
+        "--machine",
+        default=None,
+        help="machine config name/path (configs/machine): serve the M5 one-chip "
+        "machine — blocks + cat units + machine model; --code is then ignored",
+    )
     serve.add_argument("--code", choices=sorted(codes.available_codes()), default="surface")
     serve.add_argument("--distance", type=int, default=3, help="surface family only")
     serve.add_argument("--decoder", default=None, help="default: family-appropriate")
@@ -103,7 +114,7 @@ def _resolve_code(args: argparse.Namespace) -> codes.QECCode:
 
 def _resolve_decoder(family: str, requested: str | None) -> str:
     """The requested decoder, or the family-appropriate default."""
-    return requested or _DEFAULT_DECODER.get(family, "pymatching")
+    return requested or decoder.default_decoder(family)
 
 
 def _cmd_batch_curve(args: argparse.Namespace) -> None:
@@ -251,20 +262,73 @@ def _cmd_live(args: argparse.Namespace) -> None:
         print(f"  ... {len(report.events) - 50} more events")
 
 
+def _cmd_machine_report(args: argparse.Namespace) -> None:
+    """Collect predicted-vs-measured for a machine config; write the CSV artifact."""
+    config = machine.load_machine_config(args.machine)
+    noise = component.load_noise_model(args.noise)
+    result = machine.collect_predicted_vs_measured(
+        config,
+        noise,
+        machine_seconds=args.machine_seconds,
+        shots=args.shots,
+        rounds=args.rounds,
+        seed=args.seed,
+    )
+    csv_path = args.out_dir / "m5_predicted_vs_measured.csv"
+    machine.write_pvm_csv(result, csv_path)
+    p = result.prediction
+    print(f"machine: {result.machine_name}")
+    print(f"logical qubits: predicted {p.logical_qubits}")
+    print(
+        f"physical qubits: {p.physical_qubits} paper-accounted vs {result.nominal_qubits} nominal"
+    )
+    print(f"T/day: predicted {p.t_per_day:g}, measured {result.measured_t_per_day:g}")
+    if p.t_stall_reason:
+        print(f"T queue: {result.t_queue_depth} — {p.t_stall_reason}")
+    print(
+        f"utilization {result.utilization:.4f} over {result.machine_seconds:.0f} machine-seconds "
+        f"({result.stalled_rounds} stalled rounds)"
+    )
+    ler = (
+        f"< {result.logical_error_bound:.3g} (0 errors in {result.shots} shots)"
+        if result.logical_errors == 0
+        else f"{result.logical_error_per_logical_per_shot:.3g}"
+    )
+    print(f"logical error / logical / shot: {ler}")
+    print(
+        f"mean decode latency: {result.mean_decode_latency_s * 1e3:.3f} ms "
+        f"over {result.decodes} decodes (budget 6 ms)"
+    )
+    print(f"wrote {csv_path}")
+
+
 def _cmd_serve(args: argparse.Namespace) -> None:
-    """Start the live backend and serve the dashboard until interrupted."""
+    """Start the live backend (single block, or a machine) and serve the dashboard."""
     import uvicorn
 
     noise = component.load_noise_model(args.noise)
-    code = _resolve_code(args)
-    spec = component.MemoryBlockSpec(code=code, noise=noise, rounds=args.rounds)
-    decoder_name = _resolve_decoder(code.family, args.decoder)
-    backend = machine.LiveBackend(
-        spec,
-        seed=args.seed,
-        tick_seconds=args.pace_ms / 1000.0,
-        decoder_name=decoder_name,
-    )
+    backend: machine.LiveBackend | machine.MachineBackend
+    if args.machine is not None:
+        machine_config = machine.load_machine_config(args.machine)
+        backend = machine.MachineBackend(
+            machine_config,
+            noise,
+            rounds=args.rounds,
+            seed=args.seed,
+            tick_seconds=args.pace_ms / 1000.0,
+            decoder_name=args.decoder,
+        )
+        decoder_name = backend.active_decoders.get("block0", "bposd")
+    else:
+        code = _resolve_code(args)
+        spec = component.MemoryBlockSpec(code=code, noise=noise, rounds=args.rounds)
+        decoder_name = _resolve_decoder(code.family, args.decoder)
+        backend = machine.LiveBackend(
+            spec,
+            seed=args.seed,
+            tick_seconds=args.pace_ms / 1000.0,
+            decoder_name=decoder_name,
+        )
     backend.start()
     try:
         config = dashboard.load_dashboard_config(args.dashboard_config)
@@ -290,6 +354,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_decoder_race(args)
     elif args.command == "live":
         _cmd_live(args)
+    elif args.command == "machine-report":
+        _cmd_machine_report(args)
     elif args.command == "serve":
         _cmd_serve(args)
 

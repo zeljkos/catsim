@@ -1,0 +1,21 @@
+# A factory dies and the machine degrades gracefully: pause the chip's cat
+# factory (the walking cat's load-bearing resource — every SE round consumes a
+# verified cat state), watch the cat buffer drain in the machine view, the
+# block stall, utilization sag and the chip go amber; revive the factory and
+# the buffer refills, stalls stop, the chip cools back to green.
+# At N=1 the killable factory is the cat unit — memory chips host no magic
+# factory (T gates need a factory chip, which arrives with scale in M6; the
+# same set_paused kill switch will target it there).
+# Rounds trigger on block0; the kill/revive steps override the target to cat0.
+name: factory-outage
+description: "cat factory killed: buffer drains, block stalls, chip degrades; revived: machine recovers"
+target: block0
+steps:
+  - at: { shot: 0, round: 0 }
+    set_pace_seconds: 0.1   # fast enough to watch the buffer drain live
+  - at: { shot: 2, round: 0 }
+    target: cat0
+    set_paused: true        # the outage: production stops, buffer drains 1/round
+  - at: { shot: 8, round: 0 }
+    target: cat0
+    set_paused: false       # revival: 2 attempts/SEC refill vs 1 consumed

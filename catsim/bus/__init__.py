@@ -39,6 +39,14 @@ from catsim.bus.factory_events import (
     ReplacementDispatched,
     ReplacementReady,
 )
+from catsim.bus.machine_events import (
+    BlockAccounting,
+    BlockHealth,
+    ChipConfigured,
+    ChipStatus,
+    FactoryHealth,
+    MachineStatus,
+)
 from catsim.bus.query import QueryError, QueryServer, query
 from catsim.bus.transport import (
     DEFAULT_BACKEND_ADDRESS,
@@ -55,8 +63,12 @@ __all__ = [
     "DEFAULT_FRONTEND_ADDRESS",
     "SCHEMA_VERSION",
     "AnyEvent",
+    "BlockAccounting",
     "BlockConfigured",
+    "BlockHealth",
     "BusProxy",
+    "ChipConfigured",
+    "ChipStatus",
     "Command",
     "CorrectionApplied",
     "DecodeFinished",
@@ -69,12 +81,14 @@ __all__ = [
     "FactoryAccepted",
     "FactoryAttempt",
     "FactoryConfigured",
+    "FactoryHealth",
     "FactoryRejected",
     "InjectLoss",
     "InjectPauli",
     "IonLost",
     "LogicalError",
     "LossDetected",
+    "MachineStatus",
     "QubitReplaced",
     "QueryError",
     "QueryServer",

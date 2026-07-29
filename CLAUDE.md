@@ -94,7 +94,8 @@ currently registered:
   (256 physical / 12 logical); a machine is N copies of it, for any N. Past one module's
   worth of chips (40), further chips join as a second module: inter-module Bell links are
   marked **photonic interconnect** with distinct higher latency / lower rate, visible in
-  the machine view. The demo's three acts map roadmap years onto N (2026 → N=1,
+  the machine view. (Sourcing caveat: the interconnect is NOT from the paper — see the
+  M7 note.) The demo's three acts map roadmap years onto N (2026 → N=1,
   2027 → N=40, 2028 → N=80 two-module), but years are presentation labels only — nothing
   in machine configs or code knows about them.
 - Fallback for machines without Docker (CI, quick dev): provisioner spawns chips as local
@@ -264,6 +265,14 @@ reports/
   `make demo` / `make reset` (<10 s, rehearsable); sensitivity sweeps; report comparing
   measured vs paper and roadmap numbers. Acceptance: all three acts run back-to-back in
   one sitting, driven entirely from dashboard buttons.
+  **Sourcing note (honesty requirement):** the two-module photonic interconnect is NOT
+  from arXiv:2604.19481 — the paper is a single-machine blueprint, and its "photonic"
+  references are laser delivery, not interconnects. The M7 tier is sourced from IonQ's
+  public roadmap (2028: 20,000 qubits + photonic interconnect) and general field
+  literature; inter-module link rate/latency parameters are assumptions and must be
+  marked as such in the machine configs. In two-module mode the dashboard footer must
+  read: "single-machine architecture per the paper; inter-module link modeled from
+  public roadmap, parameters assumed."
 
 ## Engineering standards — NON-NEGOTIABLE
 

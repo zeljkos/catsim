@@ -51,11 +51,17 @@ class InjectSpec(BaseModel):
 
 
 class ScenarioStep(BaseModel):
-    """One timeline entry: a trigger plus exactly one action."""
+    """One timeline entry: a trigger plus exactly one action.
+
+    ``target`` overrides the scenario's target for this step alone — how one
+    timeline steers several components (e.g. rounds trigger on the block while
+    a kill switch hits its cat factory).
+    """
 
     model_config = ConfigDict(frozen=True)
 
     at: StepAt
+    target: str | None = None
     inject: InjectSpec | None = None
     inject_loss: list[int] | None = None
     set_noise_scale: float | None = None
@@ -159,7 +165,7 @@ class ScenarioRunner:
             for i, step in enumerate(self._scenario.steps):
                 if not self._fired[i] and now >= (step.at.shot, step.at.round):
                     self._fired[i] = True
-                    self._sink.publish(step.command(self._scenario.target))
+                    self._sink.publish(step.command(step.target or self._scenario.target))
         return not self.done
 
     def run(self, subscriber: ZmqSubscriber, idle_timeout_s: float = 60.0) -> None:

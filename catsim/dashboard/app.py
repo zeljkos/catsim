@@ -83,11 +83,15 @@ def create_app(
         }
 
     @app.get("/api/layout")
-    async def api_layout() -> dict[str, Any]:
-        """Fetch the announced block's geometry from its query address."""
-        configured = hub.latest_configured
+    async def api_layout(source: str | None = None) -> dict[str, Any]:
+        """Fetch an announced block's geometry from its query address.
+
+        ``source`` picks a block by component id; default is the hero block
+        (first by source order).
+        """
+        configured = hub.latest_blocks.get(source) if source else hub.latest_configured
         if configured is None:
-            raise HTTPException(status_code=503, detail="no block announced yet")
+            raise HTTPException(status_code=503, detail="no such block announced yet")
         payload = await asyncio.to_thread(query, configured.query_address, "layout")
         return dict(json.loads(payload))
 

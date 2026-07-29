@@ -58,6 +58,52 @@ EVENTS: list[bus.AnyEvent] = [
     bus.LossDetected(source="b0", qubit=12, shot=0, round=3),
     bus.ReplacementDispatched(source="qf0", qubit=12, block="b0", ready_in_rounds=2),
     bus.ReplacementReady(source="qf0", target="b0", qubit=12),
+    bus.ChipConfigured(
+        source="m0",
+        chip_id="chip0",
+        machine_name="chip-256",
+        nominal_qubits=256,
+        paper_qubits=262,
+        logical_qubits=6,
+        accounting="paper",
+        blocks=[
+            bus.BlockAccounting(
+                block_id="block0", code_name="q70", num_logical=6, memory_qubits=220, cat_qubits=42
+            )
+        ],
+    ),
+    bus.ChipStatus(
+        source="m0",
+        chip_id="chip0",
+        state="degraded",
+        blocks=[
+            bus.BlockHealth(
+                block_id="block0",
+                state="stalled",
+                rounds=100,
+                stalled_rounds=7,
+                cat_buffer=0,
+                cat_buffer_capacity=24,
+            )
+        ],
+        factories=[bus.FactoryHealth(source="cat0", kind="cat", state="down")],
+        utilization=100 / 107,
+    ),
+    bus.MachineStatus(
+        source="m0",
+        chips=1,
+        logical_qubits=6,
+        physical_qubits_nominal=256,
+        physical_qubits_paper=462,
+        predicted_t_per_day=0.0,
+        measured_t_per_day=0.0,
+        t_queue_depth=719,
+        t_stall_reason="no magic factory — T gates need a factory chip",
+        machine_seconds=60.0,
+        measured_shots=12,
+        measured_logical_errors=1,
+        logical_error_per_logical_per_shot=1 / 72,
+    ),
     bus.InjectPauli(source="dash", target="b0", qubits=[4], pauli="X"),
     bus.InjectLoss(source="dash", target="b0", qubits=[4]),
     bus.SetNoiseScale(source="dash", target="b0", scale=10.0),

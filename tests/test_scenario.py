@@ -17,6 +17,7 @@ from catsim.bus import (
     SetDecoderSlowdown,
     SetNoiseScale,
     SetPace,
+    SetPaused,
     SyndromeFired,
 )
 from catsim.codes import get_code
@@ -36,6 +37,7 @@ def test_shipped_scenarios_load() -> None:
         "beyond-distance",
         "ion-loss",
         "factory-yield",
+        "factory-outage",
         "decoder-overload",
     } <= set(names)
     assert all(s.description for s in scenarios)
@@ -201,3 +203,53 @@ def test_factory_yield_broadcasts_noise_steps(list_sink: ListSink) -> None:
     assert command.target == "*"
     runner.handle(RoundStarted(source="block0", shot=5, round=0))
     assert runner.done
+
+
+def test_factory_outage_kills_and_revives_the_cat_factory(list_sink: ListSink) -> None:
+    """M5: the outage script pauses cat0 (per-step target override), then revives it."""
+    scenario = load_scenario("factory-outage", SCENARIO_DIR)
+    assert scenario.target == "block0", "rounds trigger on the block"
+    runner = ScenarioRunner(scenario, list_sink)
+    runner.handle(RoundStarted(source="block0", shot=0, round=0))
+    assert isinstance(list_sink.events[-1], SetPace)
+    runner.handle(RoundStarted(source="block0", shot=2, round=0))
+    outage = list_sink.events[-1]
+    assert isinstance(outage, SetPaused)
+    assert outage.target == "cat0" and outage.paused, "the kill must hit the factory, not the block"
+    runner.handle(RoundStarted(source="block0", shot=8, round=0))
+    revival = list_sink.events[-1]
+    assert isinstance(revival, SetPaused)
+    assert revival.target == "cat0" and not revival.paused
+    assert runner.done
+
+
+def test_factory_outage_degrades_and_recovers_the_machine(list_sink: ListSink) -> None:
+    """The outage commands, routed through the machine service, stall and heal the chip."""
+    from catsim.bus import ChipStatus
+    from catsim.machine import MachineModel, MachineService, load_machine_config
+
+    model = MachineModel(load_machine_config("chip-256", REPO_ROOT / "configs" / "machine"), seed=1)
+    service = MachineService(model, list_sink)
+    runner_sink = ListSink()
+    runner = ScenarioRunner(load_scenario("factory-outage", SCENARIO_DIR), runner_sink)
+
+    def drive(shot: int, rounds: int) -> None:
+        for r in range(rounds):
+            event = RoundStarted(source="block0", shot=shot, round=r)
+            runner.handle(event)
+            while runner_sink.events:
+                service.handle(runner_sink.events.pop(0))
+            service.handle(event)
+
+    drive(shot=0, rounds=1)  # set_pace fires (block-side; no machine effect)
+    drive(shot=2, rounds=60)  # outage: buffer (24) drains, stalls accumulate
+    stalled = [e for e in list_sink.events if isinstance(e, ChipStatus)][-1]
+    assert stalled.state == "degraded"
+    assert stalled.blocks[0].state == "stalled"
+    drive(shot=8, rounds=60)  # revival: buffer refills, stalls stop
+    *_, penultimate, recovered = [e for e in list_sink.events if isinstance(e, ChipStatus)]
+    assert recovered.state == "ok"
+    assert recovered.blocks[0].state == "ok"
+    assert recovered.blocks[0].stalled_rounds == penultimate.blocks[0].stalled_rounds, (
+        "stalls must stop accumulating once the factory is back"
+    )

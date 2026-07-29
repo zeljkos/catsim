@@ -4,6 +4,54 @@ One beat per milestone, per the charter convention: **show** (what's on screen),
 **say** (the one idea the audience takes away), **stat** (the measured number that
 backs it — from this repo's artifacts, never quoted from memory).
 
+## M5 — one chip, priced honestly
+
+**Show.** `catsim serve --machine chip-256-roadmap`: the machine view. Chip0's
+composition card — two Q70 [[70,6,9]] blocks at 220 + 42 (cat unit) qubits each —
+with the **lean accounting badge**: 256 nominal sitting next to **524
+paper-accounted** (hover for the divergence note, also in the footer). Cat-buffer
+gauges full and green, the predicted-vs-measured table, and the T queue climbing
+with its attribution spelled out: *no magic factory — T gates need a factory
+chip.* Then run the `factory-outage` scenario: cat0 dies, its block's buffer
+drains one cat per round on screen, the block goes amber → red-stalled,
+utilization sags, the chip degrades; the factory revives, the buffer refills at
+2 accepts/SEC, stalls freeze, the chip cools back to green.
+
+**Say.** A chip is a bill of materials, and the paper publishes the price list
+(Table V). The roadmap's "256 physical / 12 logical" for 2026 only adds up with
+lean counting — the same two blocks at the paper's all-in prices cost 524 qubits.
+Both numbers stay on screen; divergence is displayed, never tuned away. Second
+idea: a memory chip alone is not a computer — with no magic factory the T-gate
+queue just grows, so computation is something you *buy with more chips* (that's
+Act 2). Third: the cat factory is load-bearing infrastructure, not decoration —
+in this architecture syndrome extraction consumes a verified cat state every
+round, so when the factory dies, error correction itself starves. Scaling and
+fault-tolerance are the same code path.
+
+**Stat.** (seeded; `reports/m5_predicted_vs_measured.csv` via
+`catsim machine-report --machine chip-256`; model dynamics pinned in
+`tests/machine/`)
+
+| metric | predicted (paper arithmetic) | measured (live) |
+|---|---|---|
+| logical qubits | 6 (1× Q70) | 6 |
+| physical qubits | 462 paper-accounted (220 block + 42 cat + 200 reservoir) | 256 nominal label |
+| T gates/day | 0 — no magic factory | 0; queue 7,200 deep after 600 machine-s at 12 T/s demand |
+| utilization | 1.0 | 1.0000 (0 stalled rounds in 100k SECs) |
+| logical error / logical / shot | suppressed below run resolution | < 3.33e-3 (0 errors, 50 shots × 10 rounds) |
+| decode latency | 6 ms SEC budget | mean 324 ms over 51 decodes — BP+OSD-0's bimodal tail on Q70 too |
+
+Prediction module reproduces Table I from Table V prices + Table VII gate times
+(pinned in `tests/machine/test_prediction.py`): 5×Q102+1×CH2 → 110 logical,
+1.046M T/day (paper: 110, 1.0M); 17×Q70+1×CH2 → 1.147M (paper 1.1M);
+17×Q70+3×MEK → 1.296M (paper 1.3M). Outage dynamics: buffer (24) drains in 24
+rounds, block stalls; on revival, refill in ~24 rounds and stalls stop dead.
+
+Finding worth repeating: the qLDPC decode-tail problem (M4) is not a Q102
+quirk — Q70 with BP+OSD-0 at paper noise averages 324 ms against the 6 ms
+budget, dominated by OSD-0 fallbacks. The machine's real-time story still
+depends on the paper's custom streaming decoder.
+
 ## M4 — the decoder race
 
 **Show.** The decoder race panel during the `decoder-overload` scenario: the block

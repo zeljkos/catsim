@@ -10,6 +10,7 @@ from catsim.decoder.protocol import (
     Decoder,
     DecodeResult,
     available_decoders,
+    default_decoder,
     get_decoder,
     register_decoder,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "LatencyStats",
     "MatchingDecoder",
     "available_decoders",
+    "default_decoder",
     "get_decoder",
     "plot_latency_race",
     "register_decoder",

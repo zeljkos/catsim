@@ -170,6 +170,40 @@ button.active { border-color: var(--machine); color: var(--machine); }
 .tile-strip .dot.reject { background: var(--err); }
 .tile-note { font-size: 0.72rem; min-height: 1em; }
 
+/* ---- machine view ---- */
+#panel-machine { margin: 0 1.2rem 1rem; }
+.machine-body { display: flex; gap: 1.4rem; align-items: flex-start; flex-wrap: wrap; }
+.machine-body .tiles { flex: 1.4; min-width: 320px; }
+.machine-summary { flex: 1; min-width: 300px; }
+.chip-tile { transition: border-color 0.3s; }
+.chip-tile:has(.state-badge.degraded) { border-color: var(--fired); }
+.m-qubits { margin-bottom: 0.4rem; }
+.m-qubits .diverges { color: var(--fired); border-bottom: 1px dotted var(--fired); cursor: help; }
+.m-blocks { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.4rem; }
+.m-block { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; flex-wrap: wrap; }
+.m-block-name { color: var(--workload); font-weight: bold; }
+.m-block.factory-down .m-block-name { color: var(--err); }
+.state-badge {
+  font-size: 0.68rem; padding: 0.05rem 0.5rem; border-radius: 999px;
+  border: 1px solid var(--corrected); color: var(--corrected);
+}
+.state-badge.degraded { border-color: var(--fired); color: var(--fired); }
+.state-badge.stalled, .state-badge.down { border-color: var(--err); color: var(--err); }
+.m-cat-buffer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--muted); }
+.buf {
+  display: inline-block; width: 4.5rem; height: 0.45rem; border-radius: 3px;
+  background: #1d222b; border: 1px solid var(--panel-edge); overflow: hidden;
+}
+.buf-fill { display: block; height: 100%; background: var(--corrected); transition: width 0.3s; }
+.buf-fill.low { background: var(--err); }
+.pvm { margin-bottom: 0.5rem; }
+.pvm th { font-weight: normal; }
+.pvm td:nth-child(2) { color: var(--machine); }
+.pvm td:nth-child(3) { color: var(--workload); }
+.m-tqueue { font-size: 0.85rem; margin-bottom: 0.3rem; }
+.m-tqueue.stalling { color: var(--fired); }
+tr[data-type="chip_configured"] td:first-child { color: var(--machine); }
+
 /* ---- event log ---- */
 #panel-event-log { margin: 0 1.2rem 1rem; }
 .log-scroll { max-height: 30vh; overflow-y: auto; }

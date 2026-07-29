@@ -72,3 +72,13 @@ def get_decoder(name: str, *, dem: str, **params: object) -> Decoder:
 def available_decoders() -> tuple[str, ...]:
     """List the registered decoder names."""
     return tuple(sorted(_REGISTRY))
+
+
+_FAMILY_DEFAULTS = {"surface": "pymatching", "gb": "bposd", "bb": "bposd"}
+"""Family-appropriate default: matching needs a graphlike DEM, which qLDPC
+hyperedges never decompose into; BP+OSD consumes any DEM."""
+
+
+def default_decoder(family: str) -> str:
+    """The decoder a code family gets when none is requested."""
+    return _FAMILY_DEFAULTS.get(family, "pymatching")

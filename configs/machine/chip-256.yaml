@@ -1,0 +1,30 @@
+# The unit of scale, paper-faithful: one Q70 memory block + its cat unit.
+# Priced at arXiv:2604.19481 Table V all-in rates: 220 (memory block, all-in:
+# 140 data+ancilla + beacon + local reservoir) + 42 (cat unit) = 262 qubits
+# hosting 6 logical qubits. Memory-only — no local magic factory; T gates
+# require a factory chip elsewhere in the machine (the paper's Table I
+# machines pair memory blocks with CH2/MEK factory blocks).
+name: chip-256
+description: "1x Q70 [[70,6,9]] + cat unit — 262 paper-accounted qubits, 6 logical, memory-only"
+chips: 1
+chip:
+  nominal_qubits: 256
+  accounting: paper
+  blocks:
+    - family: bb
+      code: q70
+  magic_factories: []
+
+# Behavioral model parameters — assumptions, NOT from the paper (marked per
+# charter): cat buffer depth and production rate shape the outage/recovery
+# dynamics; the paper specifies neither at this granularity.
+assumptions:
+  cat_buffer_capacity: 24
+  cat_attempts_per_sec: 2
+  status_every_rounds: 5
+
+# Reference workload demand: ~12 T/s tracks the paper's ~1M T gates/day
+# throughput reference. With no magic factory the T queue visibly stalls —
+# honest at N=1; factory chips arrive with scale (M6).
+workload:
+  t_per_second: 12.0

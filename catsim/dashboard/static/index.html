@@ -78,6 +78,19 @@
     </aside>
   </main>
 
+  <section class="panel" id="panel-machine">
+    <div class="panel-head">
+      <h2>machine view</h2>
+      <span class="muted">chips · composition &amp; accounting · health · predicted vs measured</span>
+    </div>
+    <div class="machine-body">
+      <div id="chip-tiles" class="tiles">
+        <p class="muted" id="machine-empty">no chips announced yet — serve with --machine</p>
+      </div>
+      <div id="machine-summary" class="machine-summary"></div>
+    </div>
+  </section>
+
   <section class="panel" id="panel-decoder">
     <div class="panel-head">
       <h2>decoder race</h2>
@@ -129,6 +142,9 @@
         <option>factory_configured</option>
         <option>shot_finished</option>
         <option>block_configured</option>
+        <option>chip_configured</option>
+        <option>chip_status</option>
+        <option>machine_status</option>
       </select>
     </div>
     <div class="log-scroll">
@@ -140,7 +156,7 @@
   </section>
 
   <footer class="muted">
-    stabilizer + behavioral simulation calibrated to arXiv:2604.19481
+    stabilizer + behavioral simulation calibrated to arXiv:2604.19481<span id="footer-note"></span>
   </footer>
 
   <script type="module" src="/static/app.js"></script>

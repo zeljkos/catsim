@@ -35,7 +35,7 @@ from catsim.bus import (
     ShotFinished,
     SyndromeFired,
 )
-from catsim.codes import QECCode
+from catsim.codes import QECCode, get_code
 from catsim.component.circuits import (
     RoundSegments,
     build_memory_circuit,
@@ -56,6 +56,18 @@ class MemoryBlockSpec:
     code: QECCode
     noise: NoiseModel
     rounds: int
+
+
+def build_block_spec(
+    family: str, code_name: str, noise: NoiseModel, rounds: int
+) -> MemoryBlockSpec:
+    """Resolve a (family, named-instance) pair from the code registry into a spec.
+
+    Exists so the machine layer can build blocks from chip composition config
+    without importing the codes registry directly (layering contract). Only
+    named-instance families (``gb``/``bb``) resolve by name.
+    """
+    return MemoryBlockSpec(code=get_code(family, name=code_name), noise=noise, rounds=rounds)
 
 
 class MemoryBlockService:

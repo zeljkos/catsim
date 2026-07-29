@@ -41,6 +41,7 @@ from catsim.bus.factory_events import (
     ReplacementDispatched,
     ReplacementReady,
 )
+from catsim.bus.machine_events import ChipConfigured, ChipStatus, MachineStatus
 
 AnyEvent = Annotated[
     (
@@ -64,6 +65,9 @@ AnyEvent = Annotated[
         | LossDetected
         | ReplacementDispatched
         | ReplacementReady
+        | ChipConfigured
+        | ChipStatus
+        | MachineStatus
         | InjectPauli
         | InjectLoss
         | SetNoiseScale

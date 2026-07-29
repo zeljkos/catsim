@@ -64,13 +64,14 @@ def _build_surface_memory(code: QECCode, noise: NoiseModel, rounds: int) -> stim
     )
 
 
-def _build_gb_memory(code: QECCode, noise: NoiseModel, rounds: int) -> stim.Circuit:
-    """GB memory (Z basis) through the generic CSS builder."""
+def _build_two_block_memory(code: QECCode, noise: NoiseModel, rounds: int) -> stim.Circuit:
+    """GB/BB memory (Z basis) through the generic CSS builder."""
     return build_css_memory(code, noise, rounds, basis="Z")
 
 
 register_builder("surface", _build_surface_memory)
-register_builder("gb", _build_gb_memory)
+register_builder("gb", _build_two_block_memory)
+register_builder("bb", _build_two_block_memory)
 
 
 def memory_detector_error_model(circuit: stim.Circuit) -> stim.DetectorErrorModel:

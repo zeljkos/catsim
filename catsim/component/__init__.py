@@ -11,7 +11,7 @@ from catsim.component.batch import (
     run_curve,
     write_curve_csv,
 )
-from catsim.component.block import MemoryBlockService, MemoryBlockSpec
+from catsim.component.block import MemoryBlockService, MemoryBlockSpec, build_block_spec
 from catsim.component.circuits import (
     RoundSegments,
     build_memory_circuit,
@@ -56,6 +56,7 @@ __all__ = [
     "available_factories",
     "block_layout",
     "build_bell_factory",
+    "build_block_spec",
     "build_cat_factory",
     "build_css_memory",
     "build_factory_circuit",

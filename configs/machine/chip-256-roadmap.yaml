@@ -1,0 +1,34 @@
+# The roadmap-labeled unit: two Q70 memory blocks lean-counted to the 2026
+# device's 256 physical / 12 logical (ionq.com/roadmap). The divergence from
+# paper accounting is documented below and surfaced in the machine view and
+# dashboard footer — displayed, never tuned away.
+name: chip-256-roadmap
+description: "2x Q70 [[70,6,9]] lean-counted to 256 nominal — 12 logical; paper accounting says 524"
+chips: 1
+chip:
+  nominal_qubits: 256
+  accounting: lean
+  accounting_note: >-
+    Roadmap lean counting: 256 nominal covers little more than the two blocks'
+    280 data+ancilla qubits (2 x 140, Table IX). Priced at paper Table V
+    all-in rates the same composition costs 524 qubits (2 x 220 memory + 2 x
+    42 cat units), before the machine-shared reservoir (200) and transport
+    overhead. The roadmap's denser 12.5:1 physical:logical ratio also targets
+    logical error 1e-7, not Table I's 1e-10 (paper reconciliation note,
+    CLAUDE.md).
+  blocks:
+    - family: bb
+      code: q70
+    - family: bb
+      code: q70
+  magic_factories: []
+
+# Behavioral model parameters — assumptions, NOT from the paper (see
+# chip-256.yaml for what each shapes).
+assumptions:
+  cat_buffer_capacity: 24
+  cat_attempts_per_sec: 2
+  status_every_rounds: 5
+
+workload:
+  t_per_second: 12.0

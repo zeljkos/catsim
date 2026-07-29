@@ -1,0 +1,11 @@
+metric,predicted (paper),measured
+machine,chip-256,
+logical qubits,6,6
+physical qubits,462,256 nominal
+T gates per day,0,0
+T stall reason,no magic factory — T gates need a factory chip,queue 7200
+utilization,1.0,1.0000
+stalled rounds,0,0
+machine seconds simulated,,600.0
+logical error / logical / shot,suppressed below run resolution,< 0.00333 (0 errors seen) (50 shots x 10 rounds)
+mean decode latency (ms),< 6 ms SEC budget,323.809 over 51 decodes

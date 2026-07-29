@@ -130,3 +130,80 @@ def test_hub_replays_factory_announcements_to_late_joiners() -> None:
         hub.unregister(late)
 
     asyncio.run(scenario())
+
+
+def test_shipped_config_parses_machine_panel_and_scale_presets() -> None:
+    config = load_dashboard_config(REPO_ROOT / "configs" / "dashboard.yaml")
+    assert config.panels.machine is True, "M5: the machine view ships enabled"
+    chips = [p.chips for p in config.scale_presets]
+    assert chips == [1, 40, 80], "roadmap presets are display sugar defined only here"
+
+
+def test_hub_replays_machine_announcements_to_late_joiners() -> None:
+    import asyncio
+
+    from catsim.bus import BlockAccounting, ChipConfigured, MachineStatus
+
+    chip = ChipConfigured(
+        source="machine0",
+        chip_id="chip0",
+        machine_name="chip-256",
+        nominal_qubits=256,
+        paper_qubits=262,
+        logical_qubits=6,
+        accounting="paper",
+        blocks=[
+            BlockAccounting(
+                block_id="block0", code_name="q70", num_logical=6, memory_qubits=220, cat_qubits=42
+            )
+        ],
+    )
+    status = MachineStatus(
+        source="machine0",
+        chips=1,
+        logical_qubits=6,
+        physical_qubits_nominal=256,
+        physical_qubits_paper=462,
+        predicted_t_per_day=0.0,
+        measured_t_per_day=0.0,
+        t_queue_depth=3,
+        machine_seconds=1.0,
+    )
+
+    async def scenario() -> None:
+        hub = EventHub()
+        hub.attach_loop(asyncio.get_running_loop())
+        hub.dispatch(chip)
+        hub.dispatch(status)
+        late = hub.register()
+        replayed = [late.get_nowait(), late.get_nowait()]
+        assert any("chip_configured" in r for r in replayed)
+        assert any("machine_status" in r for r in replayed)
+        hub.unregister(late)
+
+    asyncio.run(scenario())
+
+
+def test_layout_source_selects_a_block() -> None:
+    import asyncio
+
+    from catsim.bus import BlockConfigured
+
+    hub = EventHub()
+    for source in ("block1", "block0"):
+        hub.dispatch(
+            BlockConfigured(
+                source=source,
+                code_name="q70",
+                distance=9,
+                rounds_per_shot=5,
+                num_data_qubits=70,
+                num_logical=6,
+                noise_name="paper",
+                query_address="tcp://127.0.0.1:1",
+            )
+        )
+    assert hub.latest_configured is not None
+    assert hub.latest_configured.source == "block0", "the hero block is first by source order"
+    assert set(hub.latest_blocks) == {"block0", "block1"}
+    asyncio.new_event_loop().close()  # no loop needed; dispatch without clients is safe

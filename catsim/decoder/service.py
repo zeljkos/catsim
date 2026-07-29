@@ -52,6 +52,7 @@ class DecoderService:
         decoder_name: str = "pymatching",
         source: str = "decoder0",
         slowdown_factor: float = 1.0,
+        block: str | None = None,
     ) -> None:
         """Create the service; the decoder itself is built on ``block_configured``.
 
@@ -60,10 +61,13 @@ class DecoderService:
             decoder_name: Registry name of the decoder implementation.
             source: Component id; becomes the bus topic.
             slowdown_factor: Artificial latency multiplier, adjustable live.
+            block: Only serve this block's events (None = any block — the
+                single-block wiring). Machines run one decoder per block.
         """
         self._sink = sink
         self._decoder_name = decoder_name
         self._source = source
+        self._block = block
         self.slowdown_factor = slowdown_factor
         self._decoder: Decoder | None = None
         self._dem: str | None = None
@@ -92,21 +96,33 @@ class DecoderService:
 
     def ingest(self, event: AnyEvent) -> bool:
         """Accept one bus event: commands apply now, work queues; False ends the run."""
-        if isinstance(event, BlockConfigured):
+        if isinstance(event, BlockConfigured) and self._serves(event.source):
             self._configure(event)
         elif isinstance(event, SetDecoder) and event.target in (self._source, "*"):
             self._swap_decoder(event.name)
         elif isinstance(event, SetDecoderSlowdown) and event.target in (self._source, "*"):
             self._set_slowdown(event.factor)
-        elif isinstance(event, SyndromeFired) and self._decoder is not None:
+        elif (
+            isinstance(event, SyndromeFired)
+            and self._decoder is not None
+            and self._serves(event.source)
+        ):
             self._queue.append(event)
             self._pending_rounds += 1
             self._publish_depth()
-        elif isinstance(event, ShotFinished) and self._decoder is not None:
+        elif (
+            isinstance(event, ShotFinished)
+            and self._decoder is not None
+            and self._serves(event.source)
+        ):
             self._queue.append(event)
-        elif isinstance(event, RunFinished):
+        elif isinstance(event, RunFinished) and self._serves(event.source):
             return False
         return True
+
+    def _serves(self, source: str) -> bool:
+        """True if this service is bound to ``source`` (or to any block)."""
+        return self._block is None or source == self._block
 
     def work_one(self) -> bool:
         """Decode (or close out) the oldest queued item; False if the queue is empty."""

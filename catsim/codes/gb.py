@@ -1,8 +1,10 @@
-"""Generalized bicycle (GB) codes — the walking cat's own memory code family.
+"""Generalized bicycle (GB) codes — the walking cat's high-rate memory family.
 
 Exists to implement Q102 = [[102,22,9]] exactly as published (arXiv:2604.19481
 Appendix C, Table XXX): HX = [A|B], HZ = [Bᵀ|Aᵀ] with A, B circulant 51x51
-sums of 4 monomial shifts each (check weight 8).
+sums of 4 monomial shifts each (check weight 8). GB is the univariate (m = 1)
+special case of the bivariate bicycle construction, so all matrix machinery
+delegates to :mod:`catsim.codes.bb`.
 """
 
 from __future__ import annotations
@@ -11,18 +13,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import ClassVar
 
-import numpy as np
-
-from catsim.codes._gf2 import Matrix, coset_representatives, kernel_basis, rank
-
-
-def _circulant(size: int, powers: tuple[int, ...]) -> Matrix:
-    """The circulant a(S) for a(x) = sum of x^p: row r has 1s at (r + p) mod size."""
-    m = np.zeros((size, size), dtype=np.uint8)
-    for r in range(size):
-        for p in powers:
-            m[r, (r + p) % size] = 1
-    return m
+from catsim.codes._gf2 import Matrix
+from catsim.codes.bb import BivariateBicycleCode
 
 
 @dataclass(frozen=True)
@@ -47,43 +39,47 @@ class GeneralizedBicycleCode:
             if not powers or any(not 0 <= p < self.ell for p in powers):
                 raise ValueError(f"polynomial powers must lie in [0, {self.ell}): {powers}")
 
+    @cached_property
+    def _bb(self) -> BivariateBicycleCode:
+        """The equivalent m = 1 bivariate code carrying the matrix machinery."""
+        return BivariateBicycleCode(
+            name=self.name,
+            ell=self.ell,
+            m=1,
+            a_powers=tuple((p, 0) for p in self.a_powers),
+            b_powers=tuple((p, 0) for p in self.b_powers),
+            distance=self.distance,
+        )
+
     @property
     def num_data_qubits(self) -> int:
         """N = 2ℓ data qubits (two circulant halves)."""
         return 2 * self.ell
 
-    @cached_property
+    @property
     def hx(self) -> Matrix:
         """X-check matrix [A | B]; ℓ rows of weight |a| + |b| (overcomplete)."""
-        return np.concatenate(
-            [_circulant(self.ell, self.a_powers), _circulant(self.ell, self.b_powers)], axis=1
-        )
+        return self._bb.hx
 
-    @cached_property
+    @property
     def hz(self) -> Matrix:
         """Z-check matrix [Bᵀ | Aᵀ]; commutes with hx because circulants commute."""
-        return np.concatenate(
-            [
-                _circulant(self.ell, self.b_powers).T,
-                _circulant(self.ell, self.a_powers).T,
-            ],
-            axis=1,
-        )
+        return self._bb.hz
 
-    @cached_property
+    @property
     def num_logical(self) -> int:
         """K = n - rank(HX) - rank(HZ) over GF(2)."""
-        return self.num_data_qubits - rank(self.hx) - rank(self.hz)
+        return self._bb.num_logical
 
-    @cached_property
+    @property
     def logical_z(self) -> Matrix:
         """K independent logical-Z representatives: ker(HX) modulo rowspace(HZ)."""
-        return coset_representatives(kernel_basis(self.hx), self.hz)
+        return self._bb.logical_z
 
-    @cached_property
+    @property
     def logical_x(self) -> Matrix:
         """K independent logical-X representatives: ker(HZ) modulo rowspace(HX)."""
-        return coset_representatives(kernel_basis(self.hz), self.hx)
+        return self._bb.logical_x
 
 
 Q102 = GeneralizedBicycleCode(

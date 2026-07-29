@@ -1,8 +1,8 @@
 """Bus-to-WebSocket fanout: one subscriber thread feeding every connected client.
 
 Exists so the dashboard renders bus events verbatim — the hub forwards JSON
-payloads untouched and only remembers the latest block announcement so late
-joiners can bootstrap (layout fetch, counters context).
+payloads untouched and only remembers the latest announcements (blocks,
+factories, chips, machine status) so late joiners can bootstrap.
 """
 
 from __future__ import annotations
@@ -10,7 +10,15 @@ from __future__ import annotations
 import asyncio
 import threading
 
-from catsim.bus import AnyEvent, BlockConfigured, FactoryConfigured, ZmqSubscriber
+from catsim.bus import (
+    AnyEvent,
+    BlockConfigured,
+    ChipConfigured,
+    ChipStatus,
+    FactoryConfigured,
+    MachineStatus,
+    ZmqSubscriber,
+)
 
 
 class EventHub:
@@ -23,8 +31,18 @@ class EventHub:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self.latest_configured: BlockConfigured | None = None
+        self.latest_blocks: dict[str, BlockConfigured] = {}
         self.latest_factories: dict[str, FactoryConfigured] = {}
+        self.latest_chips: dict[str, ChipConfigured] = {}
+        self.latest_chip_status: dict[str, ChipStatus] = {}
+        self.latest_machine: MachineStatus | None = None
+
+    @property
+    def latest_configured(self) -> BlockConfigured | None:
+        """The hero block's announcement: the first block by source order."""
+        if not self.latest_blocks:
+            return None
+        return self.latest_blocks[min(self.latest_blocks)]
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """Bind the asyncio loop client queues live on (the web app's loop)."""
@@ -52,9 +70,15 @@ class EventHub:
     def dispatch(self, event: AnyEvent) -> None:
         """Fan one event out to every client queue (thread-safe)."""
         if isinstance(event, BlockConfigured):
-            self.latest_configured = event
+            self.latest_blocks[event.source] = event
         elif isinstance(event, FactoryConfigured):
             self.latest_factories[event.source] = event
+        elif isinstance(event, ChipConfigured):
+            self.latest_chips[event.chip_id] = event
+        elif isinstance(event, ChipStatus):
+            self.latest_chip_status[event.chip_id] = event
+        elif isinstance(event, MachineStatus):
+            self.latest_machine = event
         payload = event.model_dump_json()
         with self._lock:
             clients = list(self._clients)
@@ -66,10 +90,16 @@ class EventHub:
     def register(self) -> asyncio.Queue[str]:
         """Add a client; it immediately receives the cached announcements."""
         queue: asyncio.Queue[str] = asyncio.Queue()
-        if self.latest_configured is not None:
-            queue.put_nowait(self.latest_configured.model_dump_json())
-        for factory in self.latest_factories.values():
-            queue.put_nowait(factory.model_dump_json())
+        replay: list[AnyEvent] = [
+            *self.latest_blocks.values(),
+            *self.latest_factories.values(),
+            *self.latest_chips.values(),
+            *self.latest_chip_status.values(),
+        ]
+        if self.latest_machine is not None:
+            replay.append(self.latest_machine)
+        for event in replay:
+            queue.put_nowait(event.model_dump_json())
         with self._lock:
             self._clients.add(queue)
         return queue

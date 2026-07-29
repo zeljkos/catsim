@@ -5,6 +5,7 @@
 import { createBlockView } from "/static/blockview.js";
 import { createDecoderPanel } from "/static/decoder.js";
 import { createFactoriesPanel } from "/static/factories.js";
+import { createMachinePanel } from "/static/machine.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,12 +13,19 @@ const factoriesPanel = createFactoriesPanel(
   () => $("factory-tiles"),
   () => $("factories-empty"),
 );
+const machinePanel = createMachinePanel(
+  () => $("chip-tiles"),
+  () => $("machine-empty"),
+  () => $("machine-summary"),
+  () => $("footer-note"),
+);
 let decoderPanel = null; // built in main() — needs the YAML thresholds
 
 let cfg = null;
 let layout = null;
 let view = null;
-let blockId = "block0";
+let blockId = null; // hero block: the first to announce (block0 on a machine)
+let blockKey = null; // last announcement, to skip re-announce refetches
 let selectedQubit = null;
 
 // --- round frames (replay ring buffer) -------------------------------------
@@ -62,10 +70,17 @@ function renderLive() {
 async function onEvent(ev) {
   logEvent(ev);
   switch (ev.type) {
-    case "block_configured":
-      blockId = ev.source;
+    case "block_configured": {
+      // The hero block is whichever announces first (block0 on a machine);
+      // other blocks live in the machine view. Re-announcements (every shot)
+      // only refetch the layout when something actually changed.
+      if (blockId === null) blockId = ev.source;
+      if (ev.source !== blockId) break;
+      const key = JSON.stringify({ ...ev, tick: 0 });
+      if (key === blockKey) break;
+      blockKey = key;
       $("block-sub").textContent =
-        `${ev.code_name} · d=${ev.distance} · ${ev.num_data_qubits} data qubits · ` +
+        `${ev.source} · ${ev.code_name} · d=${ev.distance} · ${ev.num_data_qubits} data qubits · ` +
         `${ev.num_logical} logical · noise ${ev.noise_name}`;
       // display formatting of two announced numbers, like ms below — no physics
       $("c-ratio").textContent = (ev.num_data_qubits / ev.num_logical).toFixed(1);
@@ -73,20 +88,25 @@ async function onEvent(ev) {
       $("noise-value").textContent = `${ev.noise_scale.toFixed(2)}×`;
       await loadLayout();
       break;
+    }
     case "round_started":
+      if (ev.source !== blockId) break;
       counters.shots = Math.max(counters.shots, ev.shot + 1);
       newFrame(ev.shot, ev.round);
       renderLive();
       break;
     case "error_injected":
+      if (ev.source !== blockId) break;
       frameAt(ev.shot, ev.round).injected.push({ qubits: ev.qubits, pauli: ev.pauli });
       renderLive();
       break;
     case "syndrome_fired":
+      if (ev.source !== blockId) break;
       frameAt(ev.shot, ev.round).fired.push(...ev.check_ids);
       renderLive();
       break;
     case "decode_finished": {
+      if (ev.source !== heroDecoder()) break;
       const f = frameAt(ev.shot, ev.round);
       f.identified = ev.identified_qubits;
       counters.latencyMs = ev.latency_s * 1000;
@@ -95,18 +115,21 @@ async function onEvent(ev) {
       break;
     }
     case "decode_queue":
-      decoderPanel?.onEvent(ev);
+      if (ev.source === heroDecoder()) decoderPanel?.onEvent(ev);
       break;
     case "correction_applied":
+      if (ev.source !== heroDecoder()) break;
       frameAt(ev.shot, ev.round).corrected = ev.qubits;
       renderLive();
       break;
     case "logical_error":
+      if (ev.source !== heroDecoder()) break;
       counters.logicalErrors += 1;
       if (frames.length) frames[frames.length - 1].logical = true;
       renderLive();
       break;
     case "ion_lost":
+      if (ev.source !== blockId) break;
       lost.add(ev.qubit);
       renderLive();
       break;
@@ -115,6 +138,7 @@ async function onEvent(ev) {
       renderLive();
       break;
     case "qubit_replaced": {
+      if (ev.source !== blockId) break;
       lost.delete(ev.qubit);
       replacing.delete(ev.qubit);
       const f = ev.round === null ? frames[frames.length - 1] : frameAt(ev.shot, ev.round);
@@ -128,8 +152,18 @@ async function onEvent(ev) {
     case "factory_rejected":
       factoriesPanel.onEvent(ev);
       break;
+    case "chip_configured":
+    case "chip_status":
+    case "machine_status":
+      machinePanel.onEvent(ev);
+      break;
   }
   updateCounters();
+}
+
+// The decoder serving the hero block, by naming convention (blockN ↔ decoderN).
+function heroDecoder() {
+  return blockId === null ? null : blockId.replace("block", "decoder");
 }
 
 function updateCounters() {
@@ -181,7 +215,7 @@ async function sendCommand(command) {
   await fetch("/api/command", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source: "dashboard", target: blockId, ...command }),
+    body: JSON.stringify({ source: "dashboard", target: blockId ?? "block0", ...command }),
   });
 }
 
@@ -297,7 +331,7 @@ function wireReplay() {
 
 // --- bootstrap ----------------------------------------------------------------
 async function loadLayout() {
-  const res = await fetch("/api/layout");
+  const res = await fetch(blockId ? `/api/layout?source=${blockId}` : "/api/layout");
   if (!res.ok) return;
   layout = await res.json();
   view = createBlockView($("block-svg"), layout, (q) => {

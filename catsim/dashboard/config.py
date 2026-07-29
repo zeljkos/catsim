@@ -35,6 +35,20 @@ class PanelsConfig(BaseModel):
     replay: bool = True
     factories: bool = True
     decoder: bool = True
+    machine: bool = True
+
+
+class ScalePreset(BaseModel):
+    """One roadmap-year preset button: display sugar over the numeric N input.
+
+    Years exist ONLY in dashboard config (charter): machine configs and code
+    are year-agnostic (chip-256 x N).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str
+    chips: int = Field(gt=0)
 
 
 class DecoderPanelConfig(BaseModel):
@@ -82,6 +96,7 @@ class DashboardConfig(BaseModel):
     decoder_panel: DecoderPanelConfig = DecoderPanelConfig()
     demo_mode: DemoModeConfig = DemoModeConfig()
     panels: PanelsConfig = PanelsConfig()
+    scale_presets: list[ScalePreset] = []
     machine_accent: str = "#E8701A"
     workload_accent: str = "#3B82F6"
     scenario_dir: Path = Path("configs/scenarios")

@@ -3,6 +3,10 @@
 Exists because broadcast events must stay small: a block announces itself with
 summary fields plus a ``query_address``, and consumers fetch heavyweight data
 (detector error model, qubit layout) from there only when they need it.
+
+All sockets share the process-level context from
+:func:`catsim.bus.transport.bus_context` — a fresh context per call leaked
+file descriptors until EMFILE at macOS's default 256-fd limit.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ import threading
 from collections.abc import Callable
 
 import zmq
+
+from catsim.bus.transport import bus_context
 
 QueryHandler = Callable[[], str]
 
@@ -36,8 +42,7 @@ class QueryServer:
             address: Bind address; the wildcard port resolves at bind time.
         """
         self._handlers = handlers
-        self._ctx = zmq.Context()
-        self._socket = self._ctx.socket(zmq.REP)
+        self._socket = bus_context().socket(zmq.REP)
         self._socket.bind(address)
         self.address: str = self._socket.getsockopt_string(zmq.LAST_ENDPOINT)
         self._stop = threading.Event()
@@ -45,24 +50,31 @@ class QueryServer:
         self._thread.start()
 
     def _serve(self) -> None:
-        """Answer requests until closed; malformed or unknown queries get errors."""
-        with contextlib.suppress(zmq.ZMQError):  # context terminated: normal shutdown
-            while not self._stop.is_set():
-                if not self._socket.poll(timeout=100):
-                    continue
-                request = self._socket.recv_json()
-                name = request.get("query") if isinstance(request, dict) else None
-                handler = self._handlers.get(name) if isinstance(name, str) else None
-                if handler is None:
-                    self._socket.send_json({"ok": False, "error": f"unknown query {name!r}"})
-                else:
-                    self._socket.send_json({"ok": True, "data": handler()})
+        """Answer requests until closed; malformed or unknown queries get errors.
+
+        The socket MUST be closed by this thread (zmq sockets are not
+        thread-safe): ``close`` sets the stop flag and waits for exactly this
+        cleanup before returning.
+        """
+        try:
+            with contextlib.suppress(zmq.ZMQError):  # closed under us: shutdown
+                while not self._stop.is_set():
+                    if not self._socket.poll(timeout=100):
+                        continue
+                    request = self._socket.recv_json()
+                    name = request.get("query") if isinstance(request, dict) else None
+                    handler = self._handlers.get(name) if isinstance(name, str) else None
+                    if handler is None:
+                        self._socket.send_json({"ok": False, "error": f"unknown query {name!r}"})
+                    else:
+                        self._socket.send_json({"ok": True, "data": handler()})
+        finally:
+            self._socket.close(linger=0)
 
     def close(self) -> None:
-        """Stop the serving thread, then tear down its socket and context."""
+        """Stop the serving thread, which tears down its own socket."""
         self._stop.set()
         self._thread.join(timeout=2.0)
-        self._ctx.destroy(linger=0)
 
 
 class QueryError(RuntimeError):
@@ -83,8 +95,7 @@ def query(address: str, name: str, timeout_s: float = 5.0) -> str:
     Raises:
         QueryError: On timeout or a server-side error.
     """
-    ctx = zmq.Context()
-    socket = ctx.socket(zmq.REQ)
+    socket = bus_context().socket(zmq.REQ)
     try:
         socket.connect(address)
         socket.send_json({"query": name})
@@ -96,4 +107,3 @@ def query(address: str, name: str, timeout_s: float = 5.0) -> str:
         return str(reply["data"])
     finally:
         socket.close(linger=0)
-        ctx.term()
