@@ -13,8 +13,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 6
-"""v6: machine slice (chip_configured/chip_status/machine_status in
+SCHEMA_VERSION = 7
+"""v7: elastic-runtime slice (fleet_events.py) — join/leave protocol
+(chip_announce/chip_admitted/chip_heartbeat/chip_lost/chip_left), the
+provisioner's two operations (scale_up, drain), stop_chip, and the fidelity
+dial (set_chip_mode, set_focus); chip_status grows role/mode/machine_seconds/
+t counters, chip_configured grows role, machine_status grows lost_chips.
+v6: machine slice (chip_configured/chip_status/machine_status in
 machine_events.py) — chip composition with Table V paper accounting, per-chip
 health, and the predicted-vs-measured roll-up.
 v5: decode_queue (rounds awaiting decode at the decoder service) and the

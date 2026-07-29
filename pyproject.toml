@@ -27,6 +27,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+docker = [
+    "docker",  # provisioner's DockerSpawner only; process fallback needs nothing
+]
 dev = [
     "pytest",
     "ruff",
@@ -35,6 +38,7 @@ dev = [
     "pre-commit",
     "types-PyYAML",
     "httpx",  # fastapi.testclient transport
+    "docker",
 ]
 
 [project.scripts]
@@ -79,7 +83,7 @@ files = ["catsim", "tests"]
 
 [[tool.mypy.overrides]]
 # Untyped scientific deps: treat as Any at the boundary; our wrappers stay strict.
-module = ["stim.*", "pymatching.*", "sinter.*", "ldpc.*", "scipy.*"]
+module = ["stim.*", "pymatching.*", "sinter.*", "ldpc.*", "scipy.*", "docker", "docker.*"]
 ignore_missing_imports = true
 
 # -------------------------------------------------------------- pytest ----

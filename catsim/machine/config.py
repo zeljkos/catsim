@@ -40,7 +40,7 @@ class ChipComposition(BaseModel):
     nominal_qubits: int = Field(gt=0)
     accounting: Literal["paper", "lean"] = "paper"
     accounting_note: str = ""
-    blocks: list[BlockComposition] = Field(min_length=1)
+    blocks: list[BlockComposition] = []
     magic_factories: list[Literal["ch2", "mek"]] = []
 
     @model_validator(mode="after")
@@ -48,6 +48,13 @@ class ChipComposition(BaseModel):
         """Lean counting without a documented divergence is hiding, not accounting."""
         if self.accounting == "lean" and not self.accounting_note:
             raise ValueError("accounting: lean requires an accounting_note documenting divergence")
+        return self
+
+    @model_validator(mode="after")
+    def _hosts_something(self) -> ChipComposition:
+        """A chip hosts memory blocks or factories (M6 factory chips have no blocks)."""
+        if not self.blocks and not self.magic_factories:
+            raise ValueError("a chip must host at least one block or magic factory")
         return self
 
 

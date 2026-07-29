@@ -1,0 +1,48 @@
+# The fixed fleet services. Chips are NOT listed here: the provisioner starts
+# them as containers of the same image, attached to this network — the fleet
+# is whatever chips are currently registered, per the M6 elastic runtime.
+#
+#   make demo-docker   # build + up; dashboard at http://localhost:8000
+#   make reset         # down + remove stray chips (<10 s)
+name: catsim
+
+services:
+  scheduler:
+    image: catsim:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      CATSIM_ROLE: scheduler
+      CATSIM_MACHINE: chip-256 # the unit chip; a machine is N copies of it
+    ports:
+      - "5561:5561"
+      - "5562:5562"
+
+  provisioner:
+    # The ONLY container allowed to talk to the Docker API (socket mounted
+    # here and nowhere else). It exposes exactly scale_up{n} and drain{...}.
+    image: catsim:latest
+    environment:
+      CATSIM_ROLE: provisioner
+      CATSIM_SPAWN: docker
+      CATSIM_BUS_FRONTEND: tcp://scheduler:5561
+      CATSIM_BUS_BACKEND: tcp://scheduler:5562
+      CATSIM_IMAGE: catsim:latest
+      CATSIM_NETWORK: catsim_default # chips join this compose network
+      CATSIM_INITIAL_CHIPS: "1" # Act 1 boots with the one proven chip
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - scheduler
+
+  dashboard:
+    image: catsim:latest
+    environment:
+      CATSIM_ROLE: dashboard
+      CATSIM_BUS_FRONTEND: tcp://scheduler:5561
+      CATSIM_BUS_BACKEND: tcp://scheduler:5562
+    ports:
+      - "8000:8000"
+    depends_on:
+      - scheduler

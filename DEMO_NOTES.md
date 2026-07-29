@@ -4,6 +4,57 @@ One beat per milestone, per the charter convention: **show** (what's on screen),
 **say** (the one idea the audience takes away), **stat** (the measured number that
 backs it — from this repo's artifacts, never quoted from memory).
 
+## M6 — the machine grown live, 1 → 40 chips
+
+**Show.** `make demo` (process fallback) or `make demo-docker` (real containers):
+the machine view holds ONE chip — chip0, `▦ memory`, badge **live** (blue border:
+this chip runs the full stim + BP+OSD stack; the block view is its real physics).
+Type **39** in the scale input, press **+N chips**. Tiles flash orange as each
+container boots, announces itself on the bus, and gets admitted — one by one, not
+as a batch. Around chip 18 the first tile comes up **⚙ factory** instead of memory:
+the scheduler is balancing roles to the paper's Table I mix, and the T-gates/day
+row in predicted-vs-measured leaves zero for the first time — computation was
+bought with chips. Click any chip: the **live** badge moves, the block view now
+shows that chip's real syndrome stream (fidelity dial — one chip gets real
+physics, the fleet stays behavioral, because real decoding costs ~300 ms/round
+against a 6 ms budget; see stat). Then the failure beat: `docker kill` a chip
+(factory chips are the cruelest choice) — heartbeats miss, the tile goes red
+**lost**, the fleet count drops, its unserved T queue is handed to the surviving
+factory, a role flips to restore the mix. Scaling and fault-tolerance are the
+same code path, on screen. `make reset` → clean slate in ~5 s.
+
+**Say.** There is exactly one unit of scale: a 256-qubit chip container — one
+image, role assigned at admission, booting knowing nothing but the bus address.
+A machine is not a topology; it is whatever chips are currently registered. So
+"building the 2027 machine" is pressing +39, and losing a chip is just the join
+protocol running backwards. Second idea: the fleet's fidelity dial is the trick
+that makes this classically watchable — stabilizer physics where you're looking,
+calibrated behavioral models everywhere else — and the dashboard never hides
+which is which (every chip wears its mode badge).
+
+**Stat.** (seeded; scripts in the M6 acceptance run; fleet dynamics pinned in
+`tests/machine/`)
+
+| metric | value |
+|---|---|
+| growth 1 → 40 chips (process mode) | 4.3 s, chips registering one-by-one; roles balanced 38 memory / 2 CH2 factory (Table I 17:1) |
+| capacity at 40 chips | 10,240 nominal / 10,502 paper-accounted (Table V) / 228 logical |
+| T gates/day at 40 chips | predicted capacity 2.29M (2× CH2); **measured 1.047M** — right at the paper's ~1M/day reference — queue ≈ 0, attribution "demand-limited: factory capacity exceeds the workload" (12 T/s demand) |
+| N=1 vs M5 | logical 6 = 6; paper qubits 462 = 462; T/day 0 = 0 with identical stall attribution; T queue grows at 12.0/s of machine time (= demand); 0 logical errors in 515 shots; live decode mean 243.7 ms over 477 decodes vs M5's 324 ms (same OSD-0-fallback-dominated bimodal regime) |
+| kill/recovery, process mode (SIGKILL, mid-growth) | **10/10 clean**, loss declared 2.3–3.0 s (3 s heartbeat timeout); round 5 killed the live focus chip itself — focus re-assigned, live stack rebooted on the survivor |
+| kill/recovery, Docker (`docker kill`, mid-growth) | **10/10 clean**, loss declared 4.3–5.2 s (5 s timeout), fleet back to size each round |
+| fleet footprint | 40 chip processes ≈ 4.9 GB RSS; teardown 4.3 s; `make reset` from a 12-container stack 5.5 s |
+| why the fidelity dial is load-bearing | M4/M5: BP+OSD averages ~300 ms per Q70 decode vs the 6 ms SEC — 40 chips × 2 blocks of live decoding is ~100× oversubscribed on one host; exactly one focus chip runs live |
+
+Findings worth repeating: (1) a live chip's heartbeats legitimately gap during
+BP+OSD's seconds-long OSD-0 tail decodes — under host load the scheduler
+false-declared the focus chip lost until live-mode chips got a 4× heartbeat
+allowance (`_LIVE_TIMEOUT_FACTOR`); the decode-tail problem from M4 reaches all
+the way into cluster membership. (2) stim/pymatching publish no linux/aarch64
+wheels — the chip image compiles them in a builder stage. (3) A repo directory
+named `docker/` shadows the `docker` SDK as a namespace package; it is `deploy/`
+now.
+
 ## M5 — one chip, priced honestly
 
 **Show.** `catsim serve --machine chip-256-roadmap`: the machine view. Chip0's

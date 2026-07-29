@@ -1,0 +1,27 @@
+# chip-256 × 40: the 2027-scale machine as a STATIC batch-model config
+# (catsim machine-report). 40 homogeneous memory chips = the monolithic M5
+# model's view; note the ELASTIC runtime (catsim serve --fleet, then "+39")
+# assembles the same 40 chips with Table I role balancing instead — 38 memory
+# + 2 CH2 factory chips — so live T throughput is nonzero while this static
+# memory-only variant predicts zero. Both are honest; they answer different
+# questions (capacity of the composition vs behavior of the balanced fleet).
+name: chip-256-x40
+description: "40x [1x Q70 + cat unit] — 240 logical, memory-only static variant; the elastic fleet balances 38 memory + 2 CH2 instead"
+chips: 40
+chip:
+  nominal_qubits: 256
+  accounting: paper
+  blocks:
+    - family: bb
+      code: q70
+  magic_factories: []
+
+# Behavioral model parameters — assumptions, NOT from the paper (see
+# chip-256.yaml for what each shapes).
+assumptions:
+  cat_buffer_capacity: 24
+  cat_attempts_per_sec: 2
+  status_every_rounds: 5
+
+workload:
+  t_per_second: 12.0

@@ -234,7 +234,8 @@ catsim/
 configs/
   machine/  noise/  scenarios/  dashboard.yaml
 tests/
-docker/
+deploy/       # Dockerfile + compose (named deploy/, not docker/: a top-level
+              # docker/ dir shadows the `docker` SDK as a namespace package)
 reports/
 ```
 

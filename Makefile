@@ -1,7 +1,23 @@
 # Use the project venv's tools when present; fall back to PATH (e.g. CI).
 VENV_BIN := $(if $(wildcard .venv/bin),.venv/bin/,)
 
-.PHONY: check lint typecheck imports test format setup
+.PHONY: check lint typecheck imports test format setup demo demo-docker reset
+
+## demo: Act 1 ready to grow — the elastic fleet (1 chip, process fallback) + dashboard
+demo:
+	$(VENV_BIN)python -m catsim.cli serve --fleet 1 --machine chip-256
+
+## demo-docker: the same fleet as real containers (dashboard at :8000)
+demo-docker:
+	docker compose -f deploy/docker-compose.yaml up --build -d
+	@echo "dashboard: http://localhost:8000"
+
+## reset: kill every fleet process and container, fresh slate in <10 s
+## (chips first: they hold the compose network, so down would fail to remove it)
+reset:
+	-pkill -f "catsim.cli node" 2>/dev/null || true
+	-docker ps -aq --filter "label=catsim-chip" | xargs docker rm -f 2>/dev/null || true
+	-docker compose -f deploy/docker-compose.yaml down --remove-orphans -t 2 2>/dev/null || true
 
 ## check: the quality gate — lint + typecheck + import contracts + tests
 check: lint typecheck imports test

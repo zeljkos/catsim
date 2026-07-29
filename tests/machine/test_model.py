@@ -87,6 +87,34 @@ def test_ch2_factory_serves_t_queue_at_predicted_rate() -> None:
     assert abs(snap.t_per_day - 12.0 * 86_400) / (12.0 * 86_400) < 0.05
 
 
+def test_label_namespaces_single_chip_ids_for_the_fleet() -> None:
+    model = MachineModel(load_machine_config("chip-256", MACHINE_DIR), seed=1, label="chip7")
+    snap = model.snapshot()
+    assert snap.blocks[0].block_id == "chip7-block0"
+    assert snap.blocks[0].chip_id == "chip7"
+    assert snap.factories[0].source == "chip7-cat0"
+    assert snap.chip_blocks("chip7") == snap.blocks
+
+
+def test_factory_chip_model_serves_reassigned_demand_and_backlog() -> None:
+    config = MachineConfig(
+        name="factory-chip",
+        chip=ChipComposition(nominal_qubits=256, blocks=[], magic_factories=["ch2"]),
+        workload=WorkloadConfig(t_per_second=0.0),
+    )
+    model = MachineModel(config, seed=1, label="chip17")
+    assert model.snapshot().factories[0].source == "chip17-magic0"
+    model.step(10.0)
+    assert model.snapshot().t_done == 0  # no demand assigned yet
+    model.set_t_demand(12.0)
+    model.add_t_backlog(500)
+    model.step(600.0)
+    snap = model.snapshot()
+    # CH2 capacity ~13.3/s > 12/s demand: the 500-gate backlog drains too.
+    assert snap.t_queue_depth < 50
+    assert snap.t_done > 500
+
+
 def test_measured_acceptance_calibration_reaches_production() -> None:
     model = _chip_256()
     model.set_cat_acceptance("cat0", 0.25)  # collapsed factory (100x-noise regime)

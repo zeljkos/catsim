@@ -104,6 +104,36 @@ EVENTS: list[bus.AnyEvent] = [
         measured_logical_errors=1,
         logical_error_per_logical_per_shot=1 / 72,
     ),
+    bus.ChipAnnounce(source="inst-a1b2", nominal_qubits=256, modes=["behavioral", "live"]),
+    bus.ChipAdmitted(
+        source="scheduler",
+        target="inst-a1b2",
+        chip_id="chip3",
+        role="memory",
+        mode="behavioral",
+        blocks=[bus.BlockAssignment(family="bb", code="q70")],
+        t_demand_per_second=0.0,
+        bell_neighbors=["chip2"],
+    ),
+    bus.ChipAdmitted(
+        source="scheduler",
+        target="inst-c3d4",
+        chip_id="chip17",
+        role="factory",
+        mode="behavioral",
+        blocks=[],
+        magic_factories=["ch2"],
+        t_demand_per_second=12.0,
+    ),
+    bus.ChipHeartbeat(source="chip3", seq=42, mode="behavioral"),
+    bus.ChipLost(source="scheduler", chip_id="chip3"),
+    bus.ChipLeft(source="chip3", chip_id="chip3"),
+    bus.ScaleUp(source="dash", target="provisioner", n=39),
+    bus.Drain(source="dash", target="provisioner", n=2),
+    bus.Drain(source="dash", target="provisioner", chip_id="chip3"),
+    bus.StopChip(source="provisioner", target="chip3"),
+    bus.SetChipMode(source="scheduler", target="chip3", mode="live"),
+    bus.SetFocus(source="dash", target="scheduler", chip_id="chip3"),
     bus.InjectPauli(source="dash", target="b0", qubits=[4], pauli="X"),
     bus.InjectLoss(source="dash", target="b0", qubits=[4]),
     bus.SetNoiseScale(source="dash", target="b0", scale=10.0),
@@ -130,7 +160,15 @@ def test_events_are_frozen() -> None:
 
 
 def test_commands_are_commands() -> None:
-    command_types = ("inject_", "set_", "replacement_ready")
+    command_types = (
+        "inject_",
+        "set_",
+        "replacement_ready",
+        "chip_admitted",
+        "scale_up",
+        "drain",
+        "stop_chip",
+    )
     for event in EVENTS:
         assert isinstance(event, bus.Command) == event.type.startswith(command_types)
 

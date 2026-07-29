@@ -16,6 +16,22 @@ from catsim.bus.events import Event
 
 ComponentState = Literal["ok", "degraded", "stalled", "down"]
 
+ChipRole = Literal["memory", "factory"]
+"""What a chip contributes: qLDPC memory blocks, or magic-state factories."""
+
+ChipMode = Literal["behavioral", "live"]
+"""Fidelity dial: calibrated SimPy loops (cheap, the fleet default) or the
+full stim + decoder stack (the drill-down focus chip)."""
+
+
+class BlockAssignment(BaseModel):
+    """One memory block in a chip assignment: which registered code it runs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    family: str = "bb"
+    code: str = "q70"
+
 
 class BlockAccounting(BaseModel):
     """One memory block's composition line in a chip announcement."""
@@ -63,6 +79,7 @@ class ChipConfigured(Event):
 
     type: Literal["chip_configured"] = "chip_configured"
     chip_id: str
+    role: ChipRole = "memory"
     machine_name: str
     nominal_qubits: int
     paper_qubits: int
@@ -74,14 +91,24 @@ class ChipConfigured(Event):
 
 
 class ChipStatus(Event):
-    """Periodic per-chip health: block stalls, cat buffers, factory states."""
+    """Periodic per-chip health: block stalls, cat buffers, factory states.
+
+    ``role``/``mode`` make the fleet's fidelity dial visible per chip; the
+    ``t_*`` counters and ``machine_seconds`` let the scheduler aggregate
+    measured throughput without knowing any chip's internals.
+    """
 
     type: Literal["chip_status"] = "chip_status"
     chip_id: str
     state: ComponentState
+    role: ChipRole = "memory"
+    mode: ChipMode = "live"
     blocks: list[BlockHealth]
     factories: list[FactoryHealth]
     utilization: float = Field(ge=0.0, le=1.0)
+    machine_seconds: float = Field(default=0.0, ge=0.0)
+    t_queue_depth: int = Field(default=0, ge=0)
+    t_done: int = Field(default=0, ge=0)
 
 
 class MachineStatus(Event):
@@ -94,6 +121,7 @@ class MachineStatus(Event):
 
     type: Literal["machine_status"] = "machine_status"
     chips: int = Field(ge=0)
+    lost_chips: int = Field(default=0, ge=0)
     logical_qubits: int = Field(ge=0)
     physical_qubits_nominal: int = Field(ge=0)
     physical_qubits_paper: int = Field(ge=0)

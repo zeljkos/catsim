@@ -14,6 +14,8 @@ from catsim.bus import (
     AnyEvent,
     BlockConfigured,
     ChipConfigured,
+    ChipLeft,
+    ChipLost,
     ChipStatus,
     FactoryConfigured,
     MachineStatus,
@@ -77,6 +79,10 @@ class EventHub:
             self.latest_chips[event.chip_id] = event
         elif isinstance(event, ChipStatus):
             self.latest_chip_status[event.chip_id] = event
+        elif isinstance(event, (ChipLeft | ChipLost)):
+            # Departed chips must not haunt late joiners' bootstrap replays.
+            self.latest_chips.pop(event.chip_id, None)
+            self.latest_chip_status.pop(event.chip_id, None)
         elif isinstance(event, MachineStatus):
             self.latest_machine = event
         payload = event.model_dump_json()

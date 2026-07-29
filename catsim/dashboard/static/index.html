@@ -81,11 +81,18 @@
   <section class="panel" id="panel-machine">
     <div class="panel-head">
       <h2>machine view</h2>
-      <span class="muted">chips · composition &amp; accounting · health · predicted vs measured</span>
+      <span class="muted">chips · composition &amp; accounting · health · predicted vs measured · click a chip to focus</span>
+      <div class="fleet-controls" id="fleet-controls">
+        <input type="number" id="fleet-n" min="1" step="1" value="1" title="number of chips">
+        <button id="fleet-add" title="start N more chip containers">+N chips</button>
+        <button id="fleet-build" title="grow or drain to exactly N chips">build machine of N</button>
+        <button id="fleet-drain" title="retire the N newest chips">drain N</button>
+        <span id="fleet-presets"></span>
+      </div>
     </div>
     <div class="machine-body">
       <div id="chip-tiles" class="tiles">
-        <p class="muted" id="machine-empty">no chips announced yet — serve with --machine</p>
+        <p class="muted" id="machine-empty">no chips announced yet — serve with --machine or --fleet</p>
       </div>
       <div id="machine-summary" class="machine-summary"></div>
     </div>
@@ -145,6 +152,16 @@
         <option>chip_configured</option>
         <option>chip_status</option>
         <option>machine_status</option>
+        <option>chip_announce</option>
+        <option>chip_admitted</option>
+        <option>chip_heartbeat</option>
+        <option>chip_lost</option>
+        <option>chip_left</option>
+        <option>scale_up</option>
+        <option>drain</option>
+        <option>stop_chip</option>
+        <option>set_chip_mode</option>
+        <option>set_focus</option>
       </select>
     </div>
     <div class="log-scroll">

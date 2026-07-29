@@ -27,6 +27,31 @@ def test_serve_accepts_machine_config() -> None:
     assert build_parser().parse_args(["serve"]).machine is None  # single-block mode default
 
 
+def test_serve_fleet_flag() -> None:
+    args = build_parser().parse_args(["serve", "--fleet", "1"])
+    assert args.fleet == 1
+    assert build_parser().parse_args(["serve"]).fleet is None  # M5 backend default
+
+
+def test_node_role_defaults_to_chip_with_well_known_bus() -> None:
+    args = build_parser().parse_args(["node"])
+    assert args.command == "node"
+    assert args.role == "chip"
+    assert args.frontend.startswith("tcp://")
+    assert args.backend.startswith("tcp://")
+    assert args.instance  # every process gets a transport identity
+
+
+def test_node_env_overrides_role_and_bus(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CATSIM_ROLE", "provisioner")
+    monkeypatch.setenv("CATSIM_BUS_FRONTEND", "tcp://bus:5561")
+    monkeypatch.setenv("CATSIM_SPAWN", "docker")
+    args = build_parser().parse_args(["node"])
+    assert args.role == "provisioner"
+    assert args.frontend == "tcp://bus:5561"
+    assert args.spawn == "docker"
+
+
 def test_live_prints_summary(capsys: pytest.CaptureFixture[str]) -> None:
     main(
         [

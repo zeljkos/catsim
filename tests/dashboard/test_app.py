@@ -184,6 +184,58 @@ def test_hub_replays_machine_announcements_to_late_joiners() -> None:
     asyncio.run(scenario())
 
 
+def test_fleet_commands_pass_the_command_endpoint(
+    stack: tuple[TestClient, BusProxy, ZmqSubscriber],
+) -> None:
+    client, _, spy = stack
+    for body in (
+        {"type": "scale_up", "source": "dashboard", "target": "provisioner", "n": 39},
+        {"type": "drain", "source": "dashboard", "target": "provisioner", "n": 2},
+        {"type": "set_focus", "source": "dashboard", "target": "scheduler", "chip_id": "chip3"},
+    ):
+        assert client.post("/api/command", json=body).status_code == 200, body["type"]
+    received: list[str] = []
+    deadline = time.monotonic() + 2.0
+    while len(received) < 3 and time.monotonic() < deadline:
+        event = spy.receive(timeout_s=0.1)
+        if event is not None:
+            received.append(event.type)
+    assert received == ["scale_up", "drain", "set_focus"]
+
+
+def test_hub_forgets_lost_and_left_chips() -> None:
+    import asyncio
+
+    from catsim.bus import ChipConfigured, ChipLeft, ChipLost
+
+    def configured(chip_id: str) -> ChipConfigured:
+        return ChipConfigured(
+            source=chip_id,
+            chip_id=chip_id,
+            machine_name="chip-256",
+            nominal_qubits=256,
+            paper_qubits=262,
+            logical_qubits=6,
+            accounting="paper",
+            blocks=[],
+        )
+
+    async def scenario() -> None:
+        hub = EventHub()
+        hub.attach_loop(asyncio.get_running_loop())
+        hub.dispatch(configured("chip0"))
+        hub.dispatch(configured("chip1"))
+        hub.dispatch(ChipLost(source="scheduler", chip_id="chip0"))
+        hub.dispatch(ChipLeft(source="chip1", chip_id="chip1"))
+        assert hub.latest_chips == {}
+        assert hub.latest_chip_status == {}
+        late = hub.register()
+        assert late.qsize() == 0  # no ghost chips replayed to late joiners
+        hub.unregister(late)
+
+    asyncio.run(scenario())
+
+
 def test_layout_source_selects_a_block() -> None:
     import asyncio
 

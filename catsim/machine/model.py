@@ -116,16 +116,34 @@ class MachineModel:
     """
 
     def __init__(
-        self, config: MachineConfig, calibration: Calibration | None = None, seed: int = 0
+        self,
+        config: MachineConfig,
+        calibration: Calibration | None = None,
+        seed: int = 0,
+        label: str | None = None,
     ) -> None:
-        """Build chips, blocks, cat units, factories, and the workload processes."""
+        """Build chips, blocks, cat units, factories, and the workload processes.
+
+        Args:
+            config: The machine instance to model.
+            calibration: Timing/acceptance constants (defaults are the cited ones).
+            seed: RNG seed for cat-acceptance draws.
+            label: Fleet naming for a single-chip model (M6): the chip is
+                ``label`` and its components ``{label}-block0`` etc., so ids
+                stay unique across a fleet of independently-run chip models.
+                Requires ``config.chips == 1``; None keeps the M5 naming.
+        """
+        if label is not None and config.chips != 1:
+            raise ValueError("label naming applies to single-chip models only")
         self._config = config
         self._calibration = calibration or Calibration()
         self._rng = random.Random(seed)
+        self._label = label
         self._env = simpy.Environment()
         self._blocks: list[_Block] = []
         self._cats: dict[str, _Factory] = {}
         self._magic: list[_Factory] = []
+        self._t_per_second = config.workload.t_per_second
         self.t_queue_depth = 0
         self.t_done = 0
         self._build()
@@ -149,18 +167,19 @@ class MachineModel:
         """Instantiate model entities and register their SimPy processes."""
         sec = self._calibration.sec_seconds
         assumptions = self._config.assumptions
+        prefix = f"{self._label}-" if self._label is not None else ""
         block_index = 0
         for chip_index in range(self._config.chips):
-            chip_id = f"chip{chip_index}"
+            chip_id = self._label if self._label is not None else f"chip{chip_index}"
             for block_cfg in self._config.chip.blocks:
                 block = _Block(
-                    block_id=f"block{block_index}",
+                    block_id=f"{prefix}block{block_index}",
                     chip_id=chip_id,
                     code=block_cfg.code,
                     capacity=assumptions.cat_buffer_capacity,
                 )
                 cat = _Factory(
-                    source=f"cat{block_index}",
+                    source=f"{prefix}cat{block_index}",
                     kind="cat",
                     chip_id=chip_id,
                     acceptance=self._calibration.cat_acceptance,
@@ -173,16 +192,18 @@ class MachineModel:
                 )
                 block_index += 1
             for magic_index, kind in enumerate(self._config.chip.magic_factories):
+                source = (
+                    f"{prefix}magic{magic_index}" if prefix else f"magic{chip_index}_{magic_index}"
+                )
                 factory = _Factory(
-                    source=f"magic{chip_index}_{magic_index}",
+                    source=source,
                     kind=kind,
                     chip_id=chip_id,
                     acceptance=1.0,
                 )
                 self._magic.append(factory)
                 self._env.process(self._magic_process(factory, sec))
-        if self._config.workload.t_per_second > 0:
-            self._env.process(self._workload_process())
+        self._env.process(self._workload_process())
 
     def _block_process(self, block: _Block, sec: float) -> Generator[simpy.Event, None, None]:
         """One SE round per SEC, consuming a verified cat state — or stalling."""
@@ -209,7 +230,10 @@ class MachineModel:
 
     def _magic_process(self, factory: _Factory, sec: float) -> Generator[simpy.Event, None, None]:
         """Consume the T queue two gates per pair at the Table VII pair time."""
-        memory_code = self._config.chip.blocks[0].code
+        # A factory chip hosts no memory blocks of its own; its Table VII pair
+        # time is quoted against the fleet's memory code (q70, the unit chip).
+        blocks = self._config.chip.blocks
+        memory_code = blocks[0].code if blocks else "q70"
         pair_time = t_pair_seconds(memory_code, factory.kind)
         while True:
             if factory.paused or self.t_queue_depth == 0:
@@ -221,10 +245,14 @@ class MachineModel:
             self.t_done += served
 
     def _workload_process(self) -> Generator[simpy.Event, None, None]:
-        """The reference workload: steady T-gate demand into the queue."""
-        interval = 1.0 / self._config.workload.t_per_second
+        """T-gate demand into the queue at the current (rebalance-able) rate."""
+        sec = self._calibration.sec_seconds
         while True:
-            yield self._env.timeout(interval)
+            rate = self._t_per_second
+            if rate <= 0:  # no demand assigned: idle until the rate changes
+                yield self._env.timeout(sec)
+                continue
+            yield self._env.timeout(1.0 / rate)
             self.t_queue_depth += 1
 
     def step(self, seconds: float) -> None:
@@ -236,6 +264,14 @@ class MachineModel:
         for factory in [*self._cats.values(), *self._magic]:
             if factory.source == source:
                 factory.paused = paused
+
+    def set_t_demand(self, t_per_second: float) -> None:
+        """Rebalance this model's share of the fleet's T-gate demand (M6)."""
+        self._t_per_second = max(0.0, t_per_second)
+
+    def add_t_backlog(self, gates: int) -> None:
+        """Take over T gates owed from before this chip had a factory (M6)."""
+        self.t_queue_depth += max(0, gates)
 
     def set_cat_acceptance(self, source: str, rate: float) -> None:
         """Live calibration: adopt the stim cat service's measured acceptance."""

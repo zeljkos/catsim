@@ -7,11 +7,17 @@ callable (and testable) from Python without subprocesses.
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from collections.abc import Callable
 from pathlib import Path
 
 from catsim import codes, component, dashboard, decoder, machine
+
+
+def _env(name: str, default: str) -> str:
+    """An argparse default that a container's environment can override."""
+    return os.environ.get(name, default)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,7 +86,74 @@ def build_parser() -> argparse.ArgumentParser:
     pvm.add_argument("--seed", type=int, default=0)
     pvm.add_argument("--out-dir", type=Path, default=Path("reports"))
 
+    node = sub.add_parser(
+        "node",
+        help="one fleet node — role from --role or CATSIM_ROLE "
+        "(chip | scheduler | provisioner | dashboard); one image, many roles (M6)",
+    )
+    node.add_argument(
+        "--role",
+        choices=["chip", "scheduler", "provisioner", "dashboard"],
+        default=_env("CATSIM_ROLE", "chip"),
+    )
+    node.add_argument("--frontend", default=_env("CATSIM_BUS_FRONTEND", machine.DEFAULT_FRONTEND))
+    node.add_argument("--backend", default=_env("CATSIM_BUS_BACKEND", machine.DEFAULT_BACKEND))
+    node.add_argument("--instance", default=_env("CATSIM_INSTANCE", f"inst-pid{os.getpid()}"))
+    node.add_argument("--noise", default=_env("CATSIM_NOISE", "paper-baseline"))
+    node.add_argument("--machine", default=_env("CATSIM_MACHINE", "chip-256"))
+    node.add_argument("--machine-name", default=_env("CATSIM_MACHINE_NAME", "chip-256"))
+    node.add_argument("--rounds", type=int, default=int(_env("CATSIM_ROUNDS", "10")))
+    node.add_argument("--seed", type=int, default=int(_env("CATSIM_SEED", "0")))
+    node.add_argument("--pace-ms", type=float, default=float(_env("CATSIM_PACE_MS", "500")))
+    node.add_argument(
+        "--behavioral-rate",
+        type=float,
+        default=float(_env("CATSIM_BEHAVIORAL_RATE", "1.0")),
+        help="machine seconds per wall second in behavioral mode (1 = real time)",
+    )
+    node.add_argument(
+        "--heartbeat-timeout",
+        type=float,
+        default=float(_env("CATSIM_HEARTBEAT_TIMEOUT", "5.0")),
+        help="scheduler: silence after which a chip is declared lost",
+    )
+    node.add_argument(
+        "--bind-frontend",
+        default=_env("CATSIM_BIND_FRONTEND", "tcp://0.0.0.0:5561"),
+        help="scheduler: where the bus proxy binds its XSUB side",
+    )
+    node.add_argument(
+        "--bind-backend",
+        default=_env("CATSIM_BIND_BACKEND", "tcp://0.0.0.0:5562"),
+        help="scheduler: where the bus proxy binds its XPUB side",
+    )
+    node.add_argument(
+        "--spawn",
+        choices=["process", "docker"],
+        default=_env("CATSIM_SPAWN", "process"),
+        help="provisioner: chip lifecycle backend",
+    )
+    node.add_argument("--image", default=_env("CATSIM_IMAGE", "catsim:latest"))
+    node.add_argument("--network", default=_env("CATSIM_NETWORK", "") or None)
+    node.add_argument(
+        "--initial-chips",
+        type=int,
+        default=int(_env("CATSIM_INITIAL_CHIPS", "0")),
+        help="provisioner: chips to start at boot (compose sets 1)",
+    )
+    node.add_argument("--dashboard-config", type=Path, default=Path("configs/dashboard.yaml"))
+    node.add_argument("--host", default=_env("CATSIM_HOST", "0.0.0.0"))
+    node.add_argument("--port", type=int, default=int(_env("CATSIM_PORT", "8000")))
+
     serve = sub.add_parser("serve", help="dashboard: live block + decoder + web UI")
+    serve.add_argument(
+        "--fleet",
+        type=int,
+        default=None,
+        metavar="N",
+        help="elastic mode (M6): boot the fleet runtime with N chip processes "
+        "instead of the in-process M5 backend; --machine names the unit chip",
+    )
     serve.add_argument(
         "--machine",
         default=None,
@@ -302,12 +375,94 @@ def _cmd_machine_report(args: argparse.Namespace) -> None:
     print(f"wrote {csv_path}")
 
 
-def _cmd_serve(args: argparse.Namespace) -> None:
-    """Start the live backend (single block, or a machine) and serve the dashboard."""
+def _cmd_node(args: argparse.Namespace) -> None:
+    """Run one fleet node in the selected role until interrupted."""
+    if args.role == "chip":
+        machine.run_chip(
+            args.instance,
+            args.frontend,
+            args.backend,
+            noise_name=args.noise,
+            machine_name=args.machine_name,
+            rounds=args.rounds,
+            seed=args.seed,
+            pace_ms=args.pace_ms,
+            behavioral_rate=args.behavioral_rate,
+        )
+    elif args.role == "scheduler":
+        machine.run_scheduler(
+            args.bind_frontend,
+            args.bind_backend,
+            machine=args.machine,
+            heartbeat_timeout_s=args.heartbeat_timeout,
+        )
+    elif args.role == "provisioner":
+        machine.run_provisioner(
+            args.frontend,
+            args.backend,
+            spawn=args.spawn,
+            image=args.image,
+            network=args.network,
+            noise_name=args.noise,
+            machine_name=args.machine_name,
+            rounds=args.rounds,
+            seed=args.seed,
+            pace_ms=args.pace_ms,
+            initial_chips=args.initial_chips,
+        )
+    else:
+        _serve_dashboard(args, args.frontend, args.backend, active_decoder=None)
+
+
+def _serve_dashboard(
+    args: argparse.Namespace,
+    frontend_address: str,
+    backend_address: str,
+    *,
+    active_decoder: str | None,
+) -> None:
+    """Serve the web UI against an already-running bus."""
     import uvicorn
 
+    config = dashboard.load_dashboard_config(args.dashboard_config)
+    app = dashboard.create_app(
+        config,
+        frontend_address=frontend_address,
+        backend_address=backend_address,
+        decoders=decoder.available_decoders(),
+        active_decoder=active_decoder,
+    )
+    print(f"dashboard: http://{args.host}:{args.port}  (bus: {backend_address})", flush=True)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+
+
+def _cmd_serve(args: argparse.Namespace) -> None:
+    """Start the live backend (single block, machine, or fleet) and serve the UI."""
     noise = component.load_noise_model(args.noise)
-    backend: machine.LiveBackend | machine.MachineBackend
+    backend: machine.LiveBackend | machine.MachineBackend | machine.FleetBackend
+    if args.fleet is not None:
+        unit = machine.load_machine_config(args.machine or "chip-256")
+        backend = machine.FleetBackend(
+            unit,
+            chips=args.fleet,
+            noise_name=args.noise,
+            rounds=args.rounds,
+            seed=args.seed,
+            tick_seconds=args.pace_ms / 1000.0,
+        )
+        backend.start()
+        try:
+            _serve_dashboard(
+                args,
+                backend.frontend_address,
+                backend.backend_address,
+                active_decoder=decoder.default_decoder(unit.chip.blocks[0].family)
+                if unit.chip.blocks
+                else None,
+            )
+        finally:
+            backend.stop()
+        return
     if args.machine is not None:
         machine_config = machine.load_machine_config(args.machine)
         backend = machine.MachineBackend(
@@ -331,16 +486,9 @@ def _cmd_serve(args: argparse.Namespace) -> None:
         )
     backend.start()
     try:
-        config = dashboard.load_dashboard_config(args.dashboard_config)
-        app = dashboard.create_app(
-            config,
-            frontend_address=backend.frontend_address,
-            backend_address=backend.backend_address,
-            decoders=decoder.available_decoders(),
-            active_decoder=decoder_name,
+        _serve_dashboard(
+            args, backend.frontend_address, backend.backend_address, active_decoder=decoder_name
         )
-        print(f"dashboard: http://{args.host}:{args.port}  (bus: {backend.backend_address})")
-        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     finally:
         backend.stop()
 
@@ -356,6 +504,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_live(args)
     elif args.command == "machine-report":
         _cmd_machine_report(args)
+    elif args.command == "node":
+        _cmd_node(args)
     elif args.command == "serve":
         _cmd_serve(args)
 

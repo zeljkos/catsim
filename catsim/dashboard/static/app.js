@@ -18,6 +18,7 @@ const machinePanel = createMachinePanel(
   () => $("machine-empty"),
   () => $("machine-summary"),
   () => $("footer-note"),
+  (chipId) => focusChip(chipId),
 );
 let decoderPanel = null; // built in main() — needs the YAML thresholds
 
@@ -27,6 +28,7 @@ let view = null;
 let blockId = null; // hero block: the first to announce (block0 on a machine)
 let blockKey = null; // last announcement, to skip re-announce refetches
 let selectedQubit = null;
+let fleetChips = 0; // last machine_status chip count ("build machine of N" math)
 
 // --- round frames (replay ring buffer) -------------------------------------
 const frames = [];
@@ -152,13 +154,28 @@ async function onEvent(ev) {
     case "factory_rejected":
       factoriesPanel.onEvent(ev);
       break;
+    case "machine_status":
+      fleetChips = ev.chips;
+      machinePanel.onEvent(ev);
+      break;
     case "chip_configured":
     case "chip_status":
-    case "machine_status":
+    case "chip_lost":
+    case "chip_left":
       machinePanel.onEvent(ev);
       break;
   }
   updateCounters();
+}
+
+// Click-to-focus: the named chip gets the live stack; the hero block view
+// follows it (blockN sources are namespaced "{chip}-block0" by convention,
+// like heroDecoder's block↔decoder naming).
+function focusChip(chipId) {
+  sendCommand({ type: "set_focus", chip_id: chipId, target: "scheduler" });
+  blockId = `${chipId}-block0`;
+  blockKey = null; // adopt the focus chip's block on its next announcement
+  $("block-sub").textContent = `${blockId} · waiting for the live stack to boot…`;
 }
 
 // The decoder serving the hero block, by naming convention (blockN ↔ decoderN).
@@ -182,6 +199,9 @@ function rowHidden(type, filter) {
 
 function logEvent(ev) {
   const filter = $("log-filter").value;
+  // Heartbeats are a liveness pulse, not a story: at fleet scale they would
+  // drown the log, so they only appear when asked for by name.
+  if (ev.type === "chip_heartbeat" && filter !== "chip_heartbeat") return;
   const body = $("log-body");
   const row = document.createElement("tr");
   row.dataset.type = ev.type;
@@ -310,6 +330,31 @@ function wireConsole() {
   });
 }
 
+// Scale controls: the free numeric N input is primary; roadmap presets (YAML
+// display sugar) just fill it. All three buttons publish provisioner commands.
+function wireFleet() {
+  const n = () => Math.max(1, Math.floor(Number($("fleet-n").value) || 1));
+  $("fleet-add").addEventListener("click", () =>
+    sendCommand({ type: "scale_up", n: n(), target: "provisioner" }));
+  $("fleet-drain").addEventListener("click", () =>
+    sendCommand({ type: "drain", n: n(), target: "provisioner" }));
+  $("fleet-build").addEventListener("click", () => {
+    const target = n();
+    if (target > fleetChips) {
+      sendCommand({ type: "scale_up", n: target - fleetChips, target: "provisioner" });
+    } else if (target < fleetChips) {
+      sendCommand({ type: "drain", n: fleetChips - target, target: "provisioner" });
+    }
+  });
+  for (const preset of cfg.scale_presets ?? []) {
+    const btn = document.createElement("button");
+    btn.textContent = preset.label;
+    btn.title = `fill the N input with ${preset.chips}`;
+    btn.addEventListener("click", () => { $("fleet-n").value = preset.chips; });
+    $("fleet-presets").appendChild(btn);
+  }
+}
+
 function wireReplay() {
   $("scrub").addEventListener("input", () => {
     follow = false;
@@ -377,6 +422,7 @@ async function main() {
   }
   decoderPanel = createDecoderPanel(cfg.decoder_panel, $("panel-decoder"));
   wireConsole();
+  wireFleet();
   wireReplay();
   await loadScenarios();
   await loadLayout();

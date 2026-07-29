@@ -1,9 +1,9 @@
-// Machine view: chip tiles (composition, accounting, health) and the
-// predicted-vs-measured panel, rendered from machine bus events.
-// Pure rendering — every number arrives precomputed on the events; the paper's
-// arithmetic runs in the machine layer, never here (charter).
+// Machine view: chip tiles (composition, accounting, role, fidelity mode,
+// health) and the predicted-vs-measured panel, rendered from machine bus
+// events. Pure rendering — every number arrives precomputed on the events;
+// the paper's arithmetic runs in the machine layer, never here (charter).
 
-export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFooterNote) {
+export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFooterNote, onFocusChip) {
   const chips = new Map(); // chip_id -> element
   const chipKeys = new Map(); // chip_id -> last announcement (chips re-announce; dedupe)
 
@@ -19,17 +19,22 @@ export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFo
     const empty = getEmptyNote();
     if (empty) empty.classList.add("hidden");
     el = document.createElement("div");
-    el.className = "tile chip-tile";
+    el.className = "tile chip-tile joining";
     el.innerHTML =
       `<div class="tile-head"><span class="tile-name"></span>` +
-      `<span class="m-accounting muted"></span>` +
+      `<span class="m-role muted"></span>` +
+      `<span class="m-mode mode-badge behavioral">behavioral</span>` +
       `<span class="m-state state-badge ok">ok</span></div>` +
       `<div class="m-qubits muted"></div>` +
       `<div class="m-blocks"></div>` +
-      `<div class="m-factories muted"></div>`;
+      `<div class="m-factories muted"></div>` +
+      `<div class="m-tstats muted"></div>`;
     el.querySelector(".tile-name").textContent = chipId;
+    el.title = "click to focus: this chip gets the live stim + decoder stack";
+    el.addEventListener("click", () => onFocusChip && onFocusChip(chipId));
     getContainer().appendChild(el);
     chips.set(chipId, el);
+    setTimeout(() => el.classList.remove("joining"), 1200); // arrival flash
     return el;
   }
 
@@ -39,9 +44,12 @@ export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFo
     chipKeys.set(ev.chip_id, key);
     const el = chipTile(ev.chip_id);
     el.querySelector(".tile-name").textContent = `${ev.chip_id} · ${ev.machine_name}`;
-    const acct = el.querySelector(".m-accounting");
-    acct.textContent = `${ev.accounting} accounting`;
-    acct.title = ev.accounting_note || "Table V all-in prices";
+    const role = el.querySelector(".m-role");
+    role.textContent = ev.role === "factory" ? "⚙ factory" : "▦ memory";
+    role.title =
+      ev.role === "factory"
+        ? "magic-state factory chip (Table I role mix)"
+        : "qLDPC memory chip";
     const divergent = ev.paper_qubits !== ev.nominal_qubits;
     el.querySelector(".m-qubits").innerHTML =
       `${ev.nominal_qubits} qubits nominal · ` +
@@ -61,7 +69,9 @@ export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFo
       .join("");
     el.querySelector(".m-factories").textContent = ev.magic_factories.length
       ? `magic: ${ev.magic_factories.join(", ")}`
-      : "magic: none — T gates need a factory chip (arrives with scale)";
+      : ev.blocks.length
+        ? "magic: none — T gates need a factory chip (arrives with scale)"
+        : "";
     if (ev.accounting === "lean" && getFooterNote()) {
       getFooterNote().textContent = ` · roadmap lean accounting on display — ${ev.accounting_note}`;
     }
@@ -70,6 +80,14 @@ export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFo
   function onChipStatus(ev) {
     const el = chipTile(ev.chip_id);
     setBadge(el.querySelector(".m-state"), ev.state);
+    const mode = el.querySelector(".m-mode");
+    mode.textContent = ev.mode;
+    mode.className = `m-mode mode-badge ${ev.mode}`;
+    mode.title =
+      ev.mode === "live"
+        ? "live: full stim + decoder stack (the drill-down focus)"
+        : "behavioral: SimPy model calibrated from measured baselines";
+    el.classList.toggle("focus", ev.mode === "live");
     for (const b of ev.blocks) {
       const row = el.querySelector(`.m-block[data-block="${b.block_id}"]`);
       if (!row) continue;
@@ -88,6 +106,30 @@ export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFo
         row.classList.toggle("factory-down", f.state === "down");
       }
     }
+    el.querySelector(".m-tstats").textContent =
+      ev.role === "factory"
+        ? `T queue ${ev.t_queue_depth} · ${ev.t_done} served · ${ev.machine_seconds.toFixed(0)} machine-s`
+        : "";
+  }
+
+  function onChipGone(ev, label) {
+    const el = chips.get(ev.chip_id);
+    if (!el) return;
+    if (label === "left") {
+      el.remove();
+      chips.delete(ev.chip_id);
+      chipKeys.delete(ev.chip_id);
+      return;
+    }
+    el.classList.add("lost");
+    setBadge(el.querySelector(".m-state"), "down");
+    el.querySelector(".m-state").textContent = "lost";
+    // A lost chip that never comes back fades out of the view after a beat.
+    setTimeout(() => {
+      el.remove();
+      chips.delete(ev.chip_id);
+      chipKeys.delete(ev.chip_id);
+    }, 8000);
   }
 
   function onMachineStatus(ev) {
@@ -115,7 +157,9 @@ export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFo
       (ev.t_stall_reason ? ` <span class="muted">— ${ev.t_stall_reason}</span>` : "") +
       `</div>` +
       `<div class="muted">machine time ${ev.machine_seconds.toFixed(1)} s · ` +
-      `${ev.chips} chip${ev.chips === 1 ? "" : "s"}</div>`;
+      `${ev.chips} chip${ev.chips === 1 ? "" : "s"}` +
+      (ev.lost_chips ? ` · <span class="diverges">${ev.lost_chips} lost</span>` : "") +
+      `</div>`;
   }
 
   function setBadge(node, state) {
@@ -131,6 +175,8 @@ export function createMachinePanel(getContainer, getEmptyNote, getSummary, getFo
     if (ev.type === "chip_configured") onChipConfigured(ev);
     else if (ev.type === "chip_status") onChipStatus(ev);
     else if (ev.type === "machine_status") onMachineStatus(ev);
+    else if (ev.type === "chip_lost") onChipGone(ev, "lost");
+    else if (ev.type === "chip_left") onChipGone(ev, "left");
   }
 
   return { onEvent };

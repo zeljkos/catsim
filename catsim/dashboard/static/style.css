@@ -196,6 +196,30 @@ button.active { border-color: var(--machine); color: var(--machine); }
 }
 .buf-fill { display: block; height: 100%; background: var(--corrected); transition: width 0.3s; }
 .buf-fill.low { background: var(--err); }
+/* Fleet (M6): scale controls, fidelity-mode badges, join/lose choreography. */
+.fleet-controls { display: flex; gap: 0.4rem; align-items: center; margin-left: auto; flex-wrap: wrap; }
+.fleet-controls input[type="number"] {
+  width: 4.2rem; background: #1f2530; color: var(--ink);
+  border: 1px solid var(--panel-edge); border-radius: 6px; padding: 0.3rem 0.5rem; font: inherit;
+}
+.fleet-controls button { font-size: 0.75rem; padding: 0.3rem 0.6rem; }
+#fleet-presets { display: inline-flex; gap: 0.4rem; }
+#fleet-presets button { color: var(--muted); }
+
+.chip-tile { cursor: pointer; }
+.chip-tile.focus { border-color: var(--workload); }
+.chip-tile.joining { animation: join-flash 1.2s ease-out; }
+.chip-tile.lost { border-color: var(--err); opacity: 0.55; }
+@keyframes join-flash { from { border-color: var(--machine); box-shadow: 0 0 12px rgba(232, 112, 26, 0.45); } }
+.mode-badge {
+  font-size: 0.68rem; padding: 0.05rem 0.5rem; border-radius: 999px;
+  border: 1px solid var(--muted); color: var(--muted);
+}
+.mode-badge.live { border-color: var(--workload); color: var(--workload); }
+.m-role { font-size: 0.72rem; }
+.m-tstats { font-size: 0.72rem; }
+.state-badge.ok { border-color: var(--corrected); color: var(--corrected); }
+
 .pvm { margin-bottom: 0.5rem; }
 .pvm th { font-weight: normal; }
 .pvm td:nth-child(2) { color: var(--machine); }
